@@ -1,0 +1,25 @@
+# API keys - NEVER commit
+.env
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+Thumbs.db
+.DS_Store
+
+# Outputs
+outputs/
+output.txt
+
+# Lock files (not needed for Docker/pip builds)
+uv.lock

@@ -1,0 +1,680 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LexCrisis — Legal Crisis Management Environment</title>
+    <meta name="description" content="OpenEnv-compliant RL environment for multi-dimensional legal crisis management">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-base: #111111;
+            --bg-surface: #1a1a1a;
+            --bg-elevated: #222222;
+            --bg-overlay: #2d2d2d;
+            --border-subtle: #333333;
+            --border-strong: #444444;
+            --text-primary: #f0f0f0;
+            --text-secondary: #aaaaaa;
+            --text-muted: #777777;
+            --accent-blue: #4a90e2;
+            --accent-cyan: #50e3c2;
+            --accent-emerald: #b8e986;
+            --accent-amber: #f8e71c;
+            --accent-red: #d0021b;
+            --accent-violet: #4a90e2; /* Reset purple to blue */
+            --accent-rose: #d0021b;
+            --gradient-primary: #1a1a1a; /* Removed gradient */
+            --gradient-success: #b8e986;
+            --gradient-danger: #d0021b;
+            --glow-blue: none; /* Removed glows */
+            --glow-cyan: none;
+            --radius-sm: 4px;
+            --radius-md: 6px;
+            --radius-lg: 8px;
+            --font-sans: 'Inter', -apple-system, sans-serif;
+            --font-mono: 'JetBrains Mono', monospace;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: var(--font-sans);
+            background: var(--bg-base);
+            color: var(--text-primary);
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        /* ── Header ─────────────────────────────────── */
+        .header {
+            background: var(--bg-surface);
+            border-bottom: 1px solid var(--border-subtle);
+            padding: 16px 32px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            backdrop-filter: blur(12px);
+        }
+
+        .header-brand {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+        }
+
+        .header-logo {
+            width: 36px;
+            height: 36px;
+            background: #222222;
+            border: 1px solid var(--border-strong);
+            border-radius: var(--radius-sm);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+            font-weight: 800;
+            color: white;
+            box-shadow: none;
+        }
+
+        .header-title {
+            font-size: 20px;
+            font-weight: 700;
+            letter-spacing: -0.02em;
+            color: var(--text-primary);
+        }
+
+        .header-subtitle {
+            font-size: 12px;
+            color: var(--text-muted);
+            font-family: var(--font-sans);
+            font-weight: 500;
+        }
+
+        .header-status {
+            display: flex;
+            gap: 12px;
+            align-items: center;
+        }
+
+        .status-badge {
+            padding: 5px 12px;
+            border-radius: 20px;
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .status-ready { background: rgba(184, 233, 134, 0.15); color: var(--accent-emerald); border: 1px solid var(--border-strong); }
+        .status-running { background: rgba(74, 144, 226, 0.15); color: var(--accent-blue); border: 1px solid var(--border-strong); }
+        .status-done { background: rgba(255, 255, 255, 0.05); color: var(--text-primary); border: 1px solid var(--border-strong); }
+
+        @keyframes pulse-glow {
+            0%, 100% { box-shadow: 0 0 5px rgba(59, 130, 246, 0.2); }
+            50% { box-shadow: 0 0 15px rgba(59, 130, 246, 0.4); }
+        }
+
+        /* ── Main Layout ────────────────────────────── */
+        .main-container {
+            display: grid;
+            grid-template-columns: 300px 1fr 320px;
+            min-height: calc(100vh - 68px);
+        }
+
+        /* ── Sidebar ────────────────────────────────── */
+        .sidebar {
+            background: var(--bg-surface);
+            border-right: 1px solid var(--border-subtle);
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+
+        .sidebar-title {
+            font-size: 11px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: var(--text-muted);
+            padding-bottom: 8px;
+            border-bottom: 1px solid var(--border-subtle);
+        }
+
+        .task-card {
+            background: var(--bg-elevated);
+            border: 1px solid var(--border-subtle);
+            border-radius: var(--radius-md);
+            padding: 14px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .task-card:hover {
+            border-color: var(--accent-blue);
+            background: var(--bg-overlay);
+            box-shadow: var(--glow-blue);
+            transform: translateY(-1px);
+        }
+
+        .task-card.active {
+            border-color: var(--accent-blue);
+            background: #2a2a2a;
+            box-shadow: none;
+        }
+
+        .task-card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 6px;
+        }
+
+        .task-name {
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        .difficulty-badge {
+            font-size: 10px;
+            font-weight: 700;
+            text-transform: uppercase;
+            padding: 2px 8px;
+            border-radius: 10px;
+            letter-spacing: 0.04em;
+        }
+
+        .diff-easy { background: rgba(16, 185, 129, 0.15); color: var(--accent-emerald); }
+        .diff-medium { background: rgba(245, 158, 11, 0.15); color: var(--accent-amber); }
+        .diff-hard { background: rgba(239, 68, 68, 0.15); color: var(--accent-red); }
+
+        .task-meta {
+            font-size: 11px;
+            color: var(--text-muted);
+            margin-top: 4px;
+        }
+
+        .task-score {
+            font-family: var(--font-mono);
+            font-size: 20px;
+            font-weight: 700;
+            color: var(--text-primary);
+            margin-top: 8px;
+        }
+
+        .run-btn {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid var(--border-strong);
+            border-radius: var(--radius-md);
+            background: #2a2a2a;
+            color: white;
+            font-family: var(--font-sans);
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            margin-top: auto;
+        }
+
+        .run-btn:hover { background: #333333; }
+        .run-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+        /* ── Terminal ───────────────────────────────── */
+        .terminal-section {
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .terminal-header {
+            background: var(--bg-elevated);
+            border-bottom: 1px solid var(--border-subtle);
+            padding: 10px 20px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--text-secondary);
+        }
+
+        .terminal-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--accent-emerald);
+            animation: blink 3s infinite;
+        }
+
+        @keyframes blink {
+            0%, 90%, 100% { opacity: 1; }
+            95% { opacity: 0.3; }
+        }
+
+        .terminal-body {
+            flex: 1;
+            background: var(--bg-base);
+            padding: 16px 20px;
+            overflow-y: auto;
+            font-family: var(--font-mono);
+            font-size: 12px;
+            line-height: 1.7;
+        }
+
+        .log-entry { margin-bottom: 6px; word-wrap: break-word; }
+        .log-step { color: var(--accent-blue); }
+        .log-action { color: var(--accent-cyan); font-weight: 500; }
+        .log-reward-pos { color: var(--accent-emerald); }
+        .log-reward-neg { color: var(--accent-red); }
+        .log-feedback { color: var(--text-secondary); }
+        .log-system { color: var(--accent-violet); font-weight: 500; }
+        .log-error { color: var(--accent-red); font-weight: 600; }
+        .log-score { color: var(--accent-amber); font-weight: 700; font-size: 14px; }
+
+        /* ── Info Panel ─────────────────────────────── */
+        .info-panel {
+            background: var(--bg-surface);
+            border-left: 1px solid var(--border-subtle);
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+            overflow-y: auto;
+        }
+
+        .info-section {
+            background: var(--bg-elevated);
+            border: 1px solid var(--border-subtle);
+            border-radius: var(--radius-md);
+            padding: 14px;
+        }
+
+        .info-label {
+            font-size: 10px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: var(--text-muted);
+            margin-bottom: 8px;
+        }
+
+        .info-value {
+            font-family: var(--font-mono);
+            font-size: 24px;
+            font-weight: 700;
+        }
+
+        .metric-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+        }
+
+        .metric-item {
+            background: var(--bg-overlay);
+            border: 1px solid var(--border-subtle);
+            border-radius: var(--radius-sm);
+            padding: 10px;
+            text-align: center;
+        }
+
+        .metric-number {
+            font-family: var(--font-mono);
+            font-size: 18px;
+            font-weight: 700;
+        }
+
+        .metric-label {
+            font-size: 10px;
+            color: var(--text-muted);
+            margin-top: 2px;
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 6px;
+            background: var(--bg-overlay);
+            border-radius: 3px;
+            overflow: hidden;
+            margin-top: 8px;
+        }
+
+        .progress-fill {
+            height: 100%;
+            border-radius: 3px;
+            background: var(--accent-blue);
+            transition: width 0.5s ease;
+        }
+
+        .legal-citations {
+            list-style: none;
+            padding: 0;
+        }
+
+        .legal-citations li {
+            font-size: 11px;
+            color: var(--text-secondary);
+            padding: 4px 0;
+            border-bottom: 1px solid rgba(42, 47, 62, 0.5);
+        }
+
+        .legal-citations li:last-child { border-bottom: none; }
+
+        .citation-label {
+            font-weight: 600;
+            color: var(--accent-cyan);
+        }
+
+        .findings-display {
+            font-family: var(--font-mono);
+            font-size: 11px;
+            color: var(--text-secondary);
+            white-space: pre-wrap;
+            word-break: break-all;
+            max-height: 200px;
+            overflow-y: auto;
+            background: var(--bg-base);
+            padding: 8px;
+            border-radius: var(--radius-sm);
+        }
+
+        /* ── Responsive ─────────────────────────────── */
+        @media (max-width: 1100px) {
+            .main-container { grid-template-columns: 1fr; }
+            .sidebar, .info-panel { display: none; }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div class="header-brand">
+            <div class="header-logo">⚖</div>
+            <div>
+                <div class="header-title">LexCrisis</div>
+                <div class="header-subtitle">Legal Crisis Management • OpenEnv v2.0</div>
+            </div>
+        </div>
+        <div class="header-status">
+            <span class="status-badge status-ready" id="statusBadge">● READY</span>
+        </div>
+    </div>
+
+    <div class="main-container">
+        <!-- Sidebar: Tasks -->
+        <div class="sidebar">
+            <div class="sidebar-title">Tasks</div>
+
+            <div class="task-card active" id="card-task_1" onclick="selectTask('task_1')">
+                <div class="task-card-header">
+                    <span class="task-name">Conflict Screening</span>
+                    <span class="difficulty-badge diff-easy">Easy</span>
+                </div>
+                <div class="task-meta">15 steps • BCI Rules 22, 33</div>
+                <div class="task-score" id="score-task_1">—</div>
+            </div>
+
+            <div class="task-card" id="card-task_2" onclick="selectTask('task_2')">
+                <div class="task-card-header">
+                    <span class="task-name">Privilege Review</span>
+                    <span class="difficulty-badge diff-medium">Medium</span>
+                </div>
+                <div class="task-meta">25 steps • IEA Sec 126, 129</div>
+                <div class="task-score" id="score-task_2">—</div>
+            </div>
+
+            <div class="task-card" id="card-task_3" onclick="selectTask('task_3')">
+                <div class="task-card-header">
+                    <span class="task-name">Crisis Triage</span>
+                    <span class="difficulty-badge diff-hard">Hard</span>
+                </div>
+                <div class="task-meta">40 steps • CPC Order XI, IEA Sec 45</div>
+                <div class="task-score" id="score-task_3">—</div>
+            </div>
+
+            <button class="run-btn" id="runBtn" onclick="runEpisode()">▶ Run Episode</button>
+            <button class="run-btn" id="resetBtn" onclick="resetEpisode()" style="background: var(--bg-overlay); border: 1px solid var(--border-strong);">↻ Reset</button>
+        </div>
+
+        <!-- Terminal -->
+        <div class="terminal-section">
+            <div class="terminal-header">
+                <div class="terminal-dot"></div>
+                <span>AGENT TRAJECTORY</span>
+                <span style="margin-left: auto; color: var(--text-muted);" id="termInfo">Ready</span>
+            </div>
+            <div class="terminal-body" id="terminalBody">
+                <div class="log-entry log-system">╔══════════════════════════════════════════════════════╗</div>
+                <div class="log-entry log-system">║  LexCrisis — Legal Crisis Management Environment    ║</div>
+                <div class="log-entry log-system">║  OpenEnv v2.0 • Meta PyTorch Hackathon 2026          ║</div>
+                <div class="log-entry log-system">╚══════════════════════════════════════════════════════╝</div>
+                <div class="log-entry log-feedback">
+                    <br>This environment simulates multi-dimensional legal crisis
+                    management requiring simultaneous reasoning about:<br>
+                    &nbsp; • Conflict of Interest (BCI Rules 22, 33)<br>
+                    &nbsp; • Privilege Review (IEA Sec 126, 129)<br>
+                    &nbsp; • Evidence Preservation (CPC Order XI)<br>
+                    &nbsp; • Adversarial Litigation Tactics<br>
+                    &nbsp; • Ethical Constraints with Cascading Consequences<br><br>
+                    Select a task and click "Run Episode" to begin.
+                </div>
+            </div>
+        </div>
+
+        <!-- Info Panel -->
+        <div class="info-panel">
+            <div class="sidebar-title">Episode State</div>
+
+            <div class="metric-grid">
+                <div class="metric-item">
+                    <div class="metric-number" id="metricStep">0</div>
+                    <div class="metric-label">Step</div>
+                </div>
+                <div class="metric-item">
+                    <div class="metric-number" id="metricMaxSteps">15</div>
+                    <div class="metric-label">Max Steps</div>
+                </div>
+                <div class="metric-item">
+                    <div class="metric-number" id="metricReward" style="color: var(--accent-emerald);">0.00</div>
+                    <div class="metric-label">Cumulative Reward</div>
+                </div>
+                <div class="metric-item">
+                    <div class="metric-number" id="metricScore" style="color: var(--accent-amber);">0.00</div>
+                    <div class="metric-label">Score</div>
+                </div>
+            </div>
+
+            <div class="info-section">
+                <div class="info-label">Grader Progress</div>
+                <div class="progress-bar">
+                    <div class="progress-fill" id="progressFill" style="width: 0%;"></div>
+                </div>
+            </div>
+
+            <div class="info-section">
+                <div class="info-label">Legal Framework</div>
+                <ul class="legal-citations" id="legalCitations">
+                    <li><span class="citation-label">BCI Rule 22:</span> Advising Opposite Party</li>
+                    <li><span class="citation-label">BCI Rule 33:</span> Acting Against Former Client</li>
+                    <li><span class="citation-label">IEA Sec 126:</span> Professional Communications</li>
+                    <li><span class="citation-label">IEA Sec 129:</span> Confidential Communications</li>
+                    <li><span class="citation-label">CPC Order XI:</span> Discovery and Inspection</li>
+                    <li><span class="citation-label">IEA Sec 45:</span> Opinions of Experts</li>
+                </ul>
+            </div>
+
+            <div class="info-section">
+                <div class="info-label">Agent Findings</div>
+                <div class="findings-display" id="findingsDisplay">{}</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentTask = 'task_1';
+        let isRunning = false;
+
+        function selectTask(taskId) {
+            document.querySelectorAll('.task-card').forEach(c => c.classList.remove('active'));
+            document.getElementById('card-' + taskId).classList.add('active');
+            currentTask = taskId;
+            const maxSteps = {task_1: 15, task_2: 25, task_3: 40};
+            document.getElementById('metricMaxSteps').textContent = maxSteps[taskId] || 15;
+        }
+
+        function log(msg, cls = 'log-feedback') {
+            const body = document.getElementById('terminalBody');
+            const div = document.createElement('div');
+            div.className = 'log-entry ' + cls;
+            div.innerHTML = msg;
+            body.appendChild(div);
+            body.scrollTop = body.scrollHeight;
+        }
+
+        function updateMetrics(state) {
+            document.getElementById('metricStep').textContent = state.step_count || 0;
+            document.getElementById('metricReward').textContent = (state.cumulative_reward || 0).toFixed(4);
+            document.getElementById('metricScore').textContent = (state.score || 0).toFixed(4);
+            document.getElementById('progressFill').style.width = ((state.score || 0) * 100) + '%';
+
+            const scoreColor = (state.score || 0) > 0.5 ? 'var(--accent-emerald)' :
+                              (state.score || 0) > 0.2 ? 'var(--accent-amber)' : 'var(--accent-red)';
+            document.getElementById('metricScore').style.color = scoreColor;
+        }
+
+        function updateFindings(findings) {
+            const el = document.getElementById('findingsDisplay');
+            el.textContent = JSON.stringify(findings || {}, null, 2);
+        }
+
+        async function resetEpisode() {
+            try {
+                const resp = await fetch('/reset', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({task_id: currentTask})
+                });
+                const data = await resp.json();
+                document.getElementById('terminalBody').innerHTML = '';
+                log('Environment reset: ' + currentTask, 'log-system');
+                if (data.observation) {
+                    log(data.observation.feedback || 'Ready.', 'log-feedback');
+                    updateFindings(data.observation.findings);
+                }
+                updateMetrics({step_count: 0, cumulative_reward: 0, score: 0});
+                document.getElementById('statusBadge').className = 'status-badge status-ready';
+                document.getElementById('statusBadge').textContent = '● READY';
+                document.getElementById('termInfo').textContent = currentTask;
+            } catch(e) {
+                log('Reset failed: ' + e.message, 'log-error');
+            }
+        }
+
+        async function runEpisode() {
+            if (isRunning) return;
+            isRunning = true;
+
+            document.getElementById('runBtn').disabled = true;
+            document.getElementById('statusBadge').className = 'status-badge status-running';
+            document.getElementById('statusBadge').textContent = '● RUNNING';
+            document.getElementById('terminalBody').innerHTML = '';
+
+            log('Starting episode: ' + currentTask, 'log-system');
+
+            try {
+                // Reset
+                const resetResp = await fetch('/reset', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({task_id: currentTask})
+                });
+                const resetData = await resetResp.json();
+                const obs = resetData.observation;
+                log('✓ Environment initialized', 'log-system');
+                log('Task: ' + (obs.task_id || currentTask), 'log-feedback');
+
+                // Demo: send a sequence of reasonable actions
+                const sequences = {
+                    task_1: [
+                        {action_type: 'review_client', parameters: {client_id: 'CLIENT-001'}},
+                        {action_type: 'review_client', parameters: {client_id: 'CLIENT-002'}},
+                        {action_type: 'review_client', parameters: {client_id: 'CLIENT-003'}},
+                        {action_type: 'check_conflict', parameters: {client_a: 'CLIENT-001', client_b: 'CLIENT-003'}},
+                        {action_type: 'cite_rule', parameters: {client_a: 'CLIENT-001', client_b: 'CLIENT-003', rule: 'BCI Rule 33'}},
+                        {action_type: 'accept_client', parameters: {client_id: 'CLIENT-001', justification: 'Plaintiff — no internal conflicts'}},
+                        {action_type: 'decline_client', parameters: {client_id: 'CLIENT-003', reason: 'Direct adversity with plaintiffs'}},
+                        {action_type: 'submit_intake', parameters: {}}
+                    ],
+                    task_2: [
+                        {action_type: 'review_document', parameters: {doc_id: 'DOC-001'}},
+                        {action_type: 'classify_privilege', parameters: {doc_id: 'DOC-001', classification: 'attorney_client', doctrine: 'IEA Sec 126'}},
+                        {action_type: 'review_document', parameters: {doc_id: 'DOC-004'}},
+                        {action_type: 'classify_privilege', parameters: {doc_id: 'DOC-004', classification: 'none', doctrine: 'Business communication'}},
+                        {action_type: 'review_document', parameters: {doc_id: 'DOC-006'}},
+                        {action_type: 'identify_waiver', parameters: {doc_id: 'DOC-006', waiver_type: 'crime_fraud', explanation: 'Attorney advising evidence concealment'}},
+                        {action_type: 'submit_review', parameters: {}}
+                    ],
+                    task_3: [
+                        {action_type: 'review_event', parameters: {event_id: 'EVENT-001'}},
+                        {action_type: 'issue_litigation_hold', parameters: {scope: 'All Veridex ESI', custodians: ['Morton', 'Ames', 'Wong', 'Liu', 'Park']}},
+                        {action_type: 'review_event', parameters: {event_id: 'EVENT-003'}},
+                        {action_type: 'flag_adversarial', parameters: {item_id: 'EVENT-003', threat_type: 'privilege_trap', explanation: 'Discovery designed to waive privilege'}},
+                        {action_type: 'review_event', parameters: {event_id: 'EVENT-004'}},
+                        {action_type: 'flag_ethical_issue', parameters: {issue_type: 'former_client_conflict', affected_clients: 'Chen, Torres, MedDistro', resolution: 'Identify conflict under BCI Rule 33 and withdraw'}},
+                        {action_type: 'submit_triage', parameters: {}}
+                    ]
+                };
+
+                const actions = sequences[currentTask] || sequences.task_1;
+
+                for (let i = 0; i < actions.length; i++) {
+                    await new Promise(r => setTimeout(r, 300)); // Pace for visibility
+
+                    const act = actions[i];
+                    log(`<span class="log-step">Step ${i+1}:</span> <span class="log-action">${act.action_type}</span>(${JSON.stringify(act.parameters).substring(0,60)})`, 'log-action');
+
+                    const stepResp = await fetch('/step', {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify(act)
+                    });
+                    const stepData = await stepResp.json();
+
+                    // Log reward
+                    const reward = stepData.reward || 0;
+                    if (reward > 0) {
+                        log(`  → reward: <span class="log-reward-pos">+${reward.toFixed(4)}</span>`, 'log-reward-pos');
+                    } else if (reward < 0) {
+                        log(`  → reward: <span class="log-reward-neg">${reward.toFixed(4)}</span>`, 'log-reward-neg');
+                    }
+
+                    // Update state
+                    const stateResp = await fetch('/state');
+                    const stateData = await stateResp.json();
+                    updateMetrics(stateData);
+                    updateFindings(stateData.findings);
+
+                    if (stepData.done) {
+                        log(`<br><span class="log-score">═══ Final Score: ${(stepData.score || 0).toFixed(4)} ═══</span>`, 'log-score');
+                        document.getElementById('score-' + currentTask).textContent = (stepData.score || 0).toFixed(4);
+                        break;
+                    }
+                }
+            } catch(e) {
+                log('Error: ' + e.message, 'log-error');
+            }
+
+            isRunning = false;
+            document.getElementById('runBtn').disabled = false;
+            document.getElementById('statusBadge').className = 'status-badge status-done';
+            document.getElementById('statusBadge').textContent = '● DONE';
+        }
+    </script>
+</body>
+</html>
