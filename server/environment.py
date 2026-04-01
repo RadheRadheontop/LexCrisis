@@ -51,6 +51,12 @@ from server.scenarios import (
 )
 from server.tasks import GRADERS, TASK_DEFINITIONS, _normalize
 
+# Action name aliases for backward compatibility
+ACTION_ALIASES: Dict[str, str] = {
+    "respond_to_discovery": "respond_discovery",
+    "flag_waiver": "identify_waiver",
+}
+
 
 # Valid actions per task
 TASK_ACTIONS: Dict[str, set] = {
@@ -91,6 +97,8 @@ class LegalDocEnvironment:
         self._ground_truth: Dict[str, Any] = {}
         self._last_content: Optional[str] = None
         self._ethical_alerts: List[str] = []
+        self._last_reward: float = 0.0
+        self._last_feedback: str = ""
 
     # ── OpenEnv API ─────────────────────────────────────────────────────────
 
@@ -118,12 +126,16 @@ class LegalDocEnvironment:
         self._findings = self._init_findings(task_id)
         self._ground_truth = self._build_ground_truth(task_id)
 
+        self._last_reward = 0.0
+        feedback_text = (
+            f"Environment reset. Task: {task_def.name} ({task_def.difficulty}).\n"
+            f"Complete the task in ≤{self._max_steps} steps.\n\n"
+            f"{task_def.description}"
+        )
+        self._last_feedback = feedback_text
+
         obs = self._make_observation(
-            feedback=(
-                f"Environment reset. Task: {task_def.name} ({task_def.difficulty}).\n"
-                f"Complete the task in ≤{self._max_steps} steps.\n\n"
-                f"{task_def.description}"
-            )
+            feedback=feedback_text
         )
         return ResetResponse(observation=obs, info={"episode_id": self._episode_id})
 
@@ -155,18 +167,12 @@ class LegalDocEnvironment:
         # Snapshot grader score before action
         old_score = self._run_grader()
 
-        # Validate action is valid for current task
-        valid_actions = TASK_ACTIONS.get(self._task_id, set())
-        if action_type not in valid_actions:
-            step_penalty = -0.05
-            feedback = (
-                f"Invalid action '{action_type}' for {self._task_id}. "
-                f"Valid actions: {sorted(valid_actions)}"
-            )
-        else:
-            handler_reward, feedback = self._dispatch_action(action_type, params)
-            # Only apply negative handler results as penalties
-            step_penalty = handler_reward if handler_reward < 0 else 0.0
+        # Resolve action aliases
+        action_type = ACTION_ALIASES.get(action_type, action_type)
+
+        # Dispatch action (allow cross-task actions to reach handlers)
+        handler_reward, feedback = self._dispatch_action(action_type, params)
+        step_penalty = handler_reward if handler_reward < 0 else 0.0
 
         # Re-run grader after action
         new_score = self._run_grader()
@@ -180,6 +186,9 @@ class LegalDocEnvironment:
             self._done = True
             feedback += f"\n\n=== EPISODE COMPLETE ===\nFinal Score: {self._score:.4f}"
 
+        self._last_reward = round(reward, 6)
+        self._last_feedback = feedback
+
         obs = self._make_observation(feedback=feedback)
         return StepResponse(
             observation=obs,
@@ -190,21 +199,27 @@ class LegalDocEnvironment:
                 "episode_id": self._episode_id,
                 "score": round(self._score, 4),
                 "cumulative_reward": round(self._cumulative_reward, 6),
+                "old_score": round(old_score, 4),
             },
         )
 
-    def state(self) -> StateResponse:
-        """Return current episode state without modifying it."""
-        return StateResponse(
-            episode_id=self._episode_id,
-            task_id=self._task_id,
-            step_count=self._step_count,
-            max_steps=self._max_steps,
-            score=round(self._score, 4),
-            cumulative_reward=round(self._cumulative_reward, 6),
-            done=self._done,
-            findings=self._findings,
-        )
+    def state(self) -> Dict[str, Any]:
+        """Return current episode state returning dict with exactly observation, reward, done."""
+        obs = self._make_observation(feedback=self._last_feedback)
+        return {
+            "observation": obs.model_dump() if hasattr(obs, 'model_dump') else obs.dict(),
+            "reward": self._last_reward,
+            "done": self._done,
+            "info": {
+                "episode_id": self._episode_id,
+                "task_id": self._task_id,
+                "step_count": self._step_count,
+                "max_steps": self._max_steps,
+                "score": round(self._score, 4),
+                "cumulative_reward": round(self._cumulative_reward, 6),
+                "findings": self._findings,
+            }
+        }
 
     # ── Action Dispatch ─────────────────────────────────────────────────────
 
@@ -234,6 +249,8 @@ class LegalDocEnvironment:
             "flag_adversarial": self._act_flag_adversarial,
             "flag_ethical_issue": self._act_flag_ethical,
             "submit_triage": self._act_submit_terminal,
+            # Universal
+            "noop": self._act_noop,
         }
 
         handler = handlers.get(action_type)
@@ -566,12 +583,23 @@ class LegalDocEnvironment:
         response_type = _normalize(params.get("response_type", ""))
         objections = str(params.get("objections", ""))
 
+        # Treat attachment=True with no explicit response_type as 'produce'
+        # (this is the ethical trap — blindly producing all attachments)
+        if not response_type and params.get("attachment") is True:
+            response_type = "produce"
+
         if not response_type:
             return -0.02, "Missing 'response_type' parameter."
 
         valid_responses = {"object", "produce", "partial_produce", "privilege_log"}
         if response_type not in valid_responses:
             return -0.02, f"Invalid response_type. Valid: {sorted(valid_responses)}"
+
+        # Safely initialize task-3 findings keys if not present
+        if "deadlines_met" not in self._findings:
+            self._findings["deadlines_met"] = {}
+        if "actions_taken" not in self._findings:
+            self._findings["actions_taken"] = []
 
         self._findings["deadlines_met"]["EVENT-003"] = {
             "step": self._step_count,
@@ -695,6 +723,21 @@ class LegalDocEnvironment:
             "task_3": "Crisis triage report",
         }
         return 0.0, f"{task_names.get(self._task_id, 'Analysis')} submitted for grading."
+
+    def _act_noop(self, params: Dict[str, Any]) -> Tuple[float, str]:
+        """No-op action. Checks and applies deadline penalties if past due."""
+        # Check if any deadlines have been missed
+        if self._task_id == "task_3":
+            from server.scenarios import CRISIS_GROUND_TRUTH
+            for event_id, dl_info in CRISIS_GROUND_TRUTH.get("deadlines", {}).items():
+                deadline_step = dl_info.get("deadline_step", 999)
+                if self._step_count > deadline_step and event_id not in self._findings.get("deadlines_met", {}):
+                    return -0.08, (
+                        f"⚠ Deadline missed for {event_id}. "
+                        f"Step {self._step_count} exceeds deadline step {deadline_step}. "
+                        f"Missed deadline penalty applied."
+                    )
+        return 0.0, "No action taken."
 
     # ── Internal Helpers ────────────────────────────────────────────────────
 

@@ -1,5 +1,8 @@
 # API keys - NEVER commit
 .env
+.env.local
+*.key
+*.pem
 
 # Python
 __pycache__/
@@ -17,9 +20,20 @@ build/
 Thumbs.db
 .DS_Store
 
-# Outputs
-outputs/
+# Test artifacts
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+test_*.py
+test_*.txt
+test_*.log
+stress_test.py
 output.txt
 
-# Lock files (not needed for Docker/pip builds)
+# Dev files
+testsprite_tests/
 uv.lock
+*.egg-info/
+
+# Outputs
+outputs/

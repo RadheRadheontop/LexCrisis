@@ -14,17 +14,47 @@ from pydantic import BaseModel, Field
 
 # ── Request Models ──────────────────────────────────────────────────────────
 
+class ClientIntake(BaseModel):
+    client_id: str
+    name: str
+    client_type: str
+    summary: str
+    details: str
+    relationships: List[str]
+
+class ConflictPair(BaseModel):
+    client_a: str
+    client_b: str
+    rule: str
+
+class PrivilegedDocument(BaseModel):
+    doc_id: str
+    title: str
+    doctrine: str
+    content: str
+    
+class CrisisEvent(BaseModel):
+    event_id: str
+    title: str
+    event_type: str
+    deadline_step: int
+    content: str
+
 
 class ResetRequest(BaseModel):
     """Body for the /reset endpoint."""
 
-    task_id: str = Field(
-        default="task_1",
+    task_id: Optional[str] = Field(
+        default=None,
         description=(
             "Task to load: task_1 (Easy: Conflict Screening), "
             "task_2 (Medium: Privilege Review), "
             "task_3 (Hard: Crisis Triage)"
         ),
+    )
+    task: Optional[str] = Field(
+        default=None,
+        description="Alternative field name for task_id (for backward compatibility)",
     )
     seed: Optional[int] = Field(default=None, description="Optional random seed (reserved for future use)")
     episode_id: Optional[str] = Field(default=None, description="Optional episode ID override")
@@ -64,6 +94,9 @@ class ActionRequest(BaseModel):
 
     action_type: str = Field(..., description="Type of legal action to perform")
     parameters: Dict[str, Any] = Field(default_factory=dict, description="Action-specific parameters")
+
+
+StepRequest = ActionRequest
 
 
 # ── Observation Models ──────────────────────────────────────────────────────
@@ -126,11 +159,8 @@ class StepResponse(BaseModel):
 class StateResponse(BaseModel):
     """Current episode state returned by state()."""
 
-    episode_id: str
-    task_id: str
-    step_count: int
-    max_steps: int
-    score: float
-    cumulative_reward: float
-    done: bool
-    findings: Dict[str, Any] = Field(default_factory=dict)
+    observation: ObservationResponse
+    reward: float = Field(description="Reward from the LAST step only")
+    done: bool = Field(description="Whether episode has terminated")
+    info: Dict[str, Any] = Field(default_factory=dict, description="Optional cumulative reward and info")
+

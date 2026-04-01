@@ -19,9 +19,9 @@ LexCrisis simulates the single most complex scenario in legal practice: managing
 
 ### 1. Environment Variables
 ```bash
-export API_BASE_URL=https://api.groq.com/openai/v1   # OpenAI-compatible endpoint
-export MODEL_NAME=llama-3.3-70b-versatile              # Model identifier
-export OPENAI_API_KEY=your_api_key_here                 # API key
+export API_BASE_URL=https://router.huggingface.co/v1   # OpenAI-compatible endpoint
+export MODEL_NAME=Qwen/Qwen2.5-72B-Instruct            # Model identifier
+export HF_TOKEN=your_token_here                         # API key
 ```
 
 ### 2. Start the Environment
@@ -76,7 +76,7 @@ lexcrisis/
 │   └── ui.html            # Premium dark-theme RL trajectory viewer
 ├── inference.py           # Baseline agent (OpenAI Client)
 ├── Dockerfile             # HF Spaces container
-├── pyproject.toml         # Dependencies
+├── requirements.txt       # Dependencies
 └── README.md
 ```
 

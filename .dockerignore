@@ -2,6 +2,7 @@ __pycache__/
 *.pyc
 *.pyo
 .git/
+.gitignore
 .env
 .env.local
 *.key
@@ -10,8 +11,18 @@ __pycache__/
 venv/
 node_modules/
 .dockerignore
-.gitignore
 *.md
 !README.md
 .pytest_cache/
 .mypy_cache/
+.ruff_cache/
+test_*.py
+test_*.txt
+test_*.log
+stress_test.py
+output.txt
+uv.lock
+*.egg-info/
+testsprite_tests/
+outputs/
+.pyproject.toml
