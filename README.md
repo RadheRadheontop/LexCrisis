@@ -1,3 +1,17 @@
+---
+title: LexCrisis
+emoji: ⚖️
+colorFrom: gray
+colorTo: blue
+sdk: docker
+pinned: false
+tags:
+  - openenv
+  - law
+  - litigation
+  - legal-ops
+---
+
 # LexCrisis
 
 LexCrisis is an OpenEnv benchmark for **legal operations incident response** in a live
