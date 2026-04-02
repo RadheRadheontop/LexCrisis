@@ -1,680 +1,1111 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>LexCrisis — Legal Crisis Management Environment</title>
-    <meta name="description" content="OpenEnv-compliant RL environment for multi-dimensional legal crisis management">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
-    <style>
-        :root {
-            --bg-base: #111111;
-            --bg-surface: #1a1a1a;
-            --bg-elevated: #222222;
-            --bg-overlay: #2d2d2d;
-            --border-subtle: #333333;
-            --border-strong: #444444;
-            --text-primary: #f0f0f0;
-            --text-secondary: #aaaaaa;
-            --text-muted: #777777;
-            --accent-blue: #4a90e2;
-            --accent-cyan: #50e3c2;
-            --accent-emerald: #b8e986;
-            --accent-amber: #f8e71c;
-            --accent-red: #d0021b;
-            --accent-violet: #4a90e2; /* Reset purple to blue */
-            --accent-rose: #d0021b;
-            --gradient-primary: #1a1a1a; /* Removed gradient */
-            --gradient-success: #b8e986;
-            --gradient-danger: #d0021b;
-            --glow-blue: none; /* Removed glows */
-            --glow-cyan: none;
-            --radius-sm: 4px;
-            --radius-md: 6px;
-            --radius-lg: 8px;
-            --font-sans: 'Inter', -apple-system, sans-serif;
-            --font-mono: 'JetBrains Mono', monospace;
-        }
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LexCrisis</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #101112;
+      --bg-elevated: #17191b;
+      --bg-panel: rgba(28, 30, 33, 0.94);
+      --bg-card: rgba(38, 40, 44, 0.9);
+      --bg-card-strong: rgba(48, 51, 56, 0.95);
+      --border: rgba(255, 255, 255, 0.08);
+      --border-strong: rgba(255, 255, 255, 0.16);
+      --text: #f5f3ef;
+      --text-soft: #cfc8bb;
+      --text-muted: #9f9a91;
+      --blue: #78aefc;
+      --blue-deep: #3f6fa8;
+      --cyan: #6bd5c8;
+      --green: #95d47f;
+      --amber: #e4c36f;
+      --red: #ee746a;
+      --shadow: 0 20px 50px rgba(0, 0, 0, 0.32);
+      --radius-xl: 24px;
+      --radius-lg: 18px;
+      --radius-md: 14px;
+      --radius-sm: 10px;
+      --font-sans: "Manrope", "Segoe UI", sans-serif;
+      --font-mono: "IBM Plex Mono", "Cascadia Code", monospace;
+    }
 
-        * { margin: 0; padding: 0; box-sizing: border-box; }
+    * { box-sizing: border-box; }
 
-        body {
-            font-family: var(--font-sans);
-            background: var(--bg-base);
-            color: var(--text-primary);
-            min-height: 100vh;
-            overflow-x: hidden;
-        }
+    html, body {
+      margin: 0;
+      min-height: 100%;
+      background:
+        radial-gradient(circle at top left, rgba(120, 174, 252, 0.10), transparent 26%),
+        radial-gradient(circle at bottom right, rgba(107, 213, 200, 0.08), transparent 22%),
+        linear-gradient(180deg, #121315 0%, #0d0f11 100%);
+      color: var(--text);
+      font-family: var(--font-sans);
+    }
 
-        /* ── Header ─────────────────────────────────── */
-        .header {
-            background: var(--bg-surface);
-            border-bottom: 1px solid var(--border-subtle);
-            padding: 16px 32px;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            position: sticky;
-            top: 0;
-            z-index: 100;
-            backdrop-filter: blur(12px);
-        }
+    body {
+      padding: 28px;
+    }
 
-        .header-brand {
-            display: flex;
-            align-items: center;
-            gap: 14px;
-        }
+    .shell {
+      max-width: 1560px;
+      margin: 0 auto;
+      display: grid;
+      gap: 20px;
+    }
 
-        .header-logo {
-            width: 36px;
-            height: 36px;
-            background: #222222;
-            border: 1px solid var(--border-strong);
-            border-radius: var(--radius-sm);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 18px;
-            font-weight: 800;
-            color: white;
-            box-shadow: none;
-        }
+    .hero {
+      display: grid;
+      grid-template-columns: minmax(0, 1.4fr) minmax(320px, 0.8fr);
+      gap: 20px;
+    }
 
-        .header-title {
-            font-size: 20px;
-            font-weight: 700;
-            letter-spacing: -0.02em;
-            color: var(--text-primary);
-        }
+    .panel {
+      background: linear-gradient(180deg, rgba(31, 33, 37, 0.98), rgba(21, 23, 25, 0.98));
+      border: 1px solid var(--border);
+      border-radius: var(--radius-xl);
+      box-shadow: var(--shadow);
+      overflow: hidden;
+      min-width: 0;
+    }
 
-        .header-subtitle {
-            font-size: 12px;
-            color: var(--text-muted);
-            font-family: var(--font-sans);
-            font-weight: 500;
-        }
+    .panel-inner {
+      padding: 22px;
+    }
 
-        .header-status {
-            display: flex;
-            gap: 12px;
-            align-items: center;
-        }
+    .eyebrow {
+      margin-bottom: 14px;
+      color: var(--cyan);
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.18em;
+      font-weight: 800;
+    }
 
-        .status-badge {
-            padding: 5px 12px;
-            border-radius: 20px;
-            font-size: 11px;
-            font-weight: 600;
-            text-transform: uppercase;
-            letter-spacing: 0.05em;
-        }
+    h1 {
+      margin: 0 0 14px;
+      font-size: clamp(42px, 6vw, 66px);
+      line-height: 0.92;
+      letter-spacing: -0.05em;
+    }
 
-        .status-ready { background: rgba(184, 233, 134, 0.15); color: var(--accent-emerald); border: 1px solid var(--border-strong); }
-        .status-running { background: rgba(74, 144, 226, 0.15); color: var(--accent-blue); border: 1px solid var(--border-strong); }
-        .status-done { background: rgba(255, 255, 255, 0.05); color: var(--text-primary); border: 1px solid var(--border-strong); }
+    .hero-copy {
+      max-width: 64ch;
+      color: var(--text-soft);
+      font-size: 18px;
+      line-height: 1.7;
+    }
 
-        @keyframes pulse-glow {
-            0%, 100% { box-shadow: 0 0 5px rgba(59, 130, 246, 0.2); }
-            50% { box-shadow: 0 0 15px rgba(59, 130, 246, 0.4); }
-        }
+    .hero-copy strong {
+      color: var(--text);
+      font-weight: 700;
+    }
 
-        /* ── Main Layout ────────────────────────────── */
-        .main-container {
-            display: grid;
-            grid-template-columns: 300px 1fr 320px;
-            min-height: calc(100vh - 68px);
-        }
+    .mini-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+    }
 
-        /* ── Sidebar ────────────────────────────────── */
-        .sidebar {
-            background: var(--bg-surface);
-            border-right: 1px solid var(--border-subtle);
-            padding: 20px;
-            display: flex;
-            flex-direction: column;
-            gap: 16px;
-        }
+    .mini-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 16px;
+      min-width: 0;
+    }
 
-        .sidebar-title {
-            font-size: 11px;
-            font-weight: 700;
-            text-transform: uppercase;
-            letter-spacing: 0.08em;
-            color: var(--text-muted);
-            padding-bottom: 8px;
-            border-bottom: 1px solid var(--border-subtle);
-        }
+    .mini-card label {
+      display: block;
+      color: var(--text-muted);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.14em;
+      margin-bottom: 10px;
+    }
 
-        .task-card {
-            background: var(--bg-elevated);
-            border: 1px solid var(--border-subtle);
-            border-radius: var(--radius-md);
-            padding: 14px;
-            cursor: pointer;
-            transition: all 0.2s ease;
-        }
+    .mini-card div {
+      font-size: 32px;
+      font-weight: 800;
+      line-height: 1;
+    }
 
-        .task-card:hover {
-            border-color: var(--accent-blue);
-            background: var(--bg-overlay);
-            box-shadow: var(--glow-blue);
-            transform: translateY(-1px);
-        }
+    .hero-strip {
+      margin-top: 14px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
 
-        .task-card.active {
-            border-color: var(--accent-blue);
-            background: #2a2a2a;
-            box-shadow: none;
-        }
+    .hero-pill {
+      flex: 1 1 160px;
+      min-width: 0;
+      background: linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.02));
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      padding: 14px 15px;
+    }
 
-        .task-card-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 6px;
-        }
+    .hero-pill label {
+      display: block;
+      margin-bottom: 8px;
+      color: var(--text-muted);
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.16em;
+      font-weight: 800;
+    }
 
-        .task-name {
-            font-size: 13px;
-            font-weight: 600;
-            color: var(--text-primary);
-        }
+    .hero-pill div {
+      color: var(--text);
+      font-size: 16px;
+      font-weight: 700;
+      line-height: 1.45;
+      letter-spacing: -0.01em;
+    }
 
-        .difficulty-badge {
-            font-size: 10px;
-            font-weight: 700;
-            text-transform: uppercase;
-            padding: 2px 8px;
-            border-radius: 10px;
-            letter-spacing: 0.04em;
-        }
+    .layout {
+      display: grid;
+      grid-template-columns: 330px minmax(0, 1fr) 390px;
+      gap: 20px;
+      align-items: start;
+    }
 
-        .diff-easy { background: rgba(16, 185, 129, 0.15); color: var(--accent-emerald); }
-        .diff-medium { background: rgba(245, 158, 11, 0.15); color: var(--accent-amber); }
-        .diff-hard { background: rgba(239, 68, 68, 0.15); color: var(--accent-red); }
+    .section-title {
+      margin: 0 0 16px;
+      color: var(--text-muted);
+      font-size: 12px;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      font-weight: 800;
+    }
 
-        .task-meta {
-            font-size: 11px;
-            color: var(--text-muted);
-            margin-top: 4px;
-        }
+    .tasks {
+      display: grid;
+      gap: 12px;
+    }
 
-        .task-score {
-            font-family: var(--font-mono);
-            font-size: 20px;
-            font-weight: 700;
-            color: var(--text-primary);
-            margin-top: 8px;
-        }
+    .task-card {
+      background: linear-gradient(180deg, rgba(44, 47, 52, 0.76), rgba(34, 36, 40, 0.72));
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 16px;
+      cursor: pointer;
+      transition: transform 0.18s ease, border-color 0.18s ease, background 0.18s ease;
+      min-width: 0;
+    }
 
-        .run-btn {
-            width: 100%;
-            padding: 12px;
-            border: 1px solid var(--border-strong);
-            border-radius: var(--radius-md);
-            background: #2a2a2a;
-            color: white;
-            font-family: var(--font-sans);
-            font-size: 13px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.2s ease;
-            margin-top: auto;
-        }
+    .task-card:hover,
+    .task-card.active {
+      border-color: rgba(120, 174, 252, 0.9);
+      background: linear-gradient(180deg, rgba(57, 62, 69, 0.82), rgba(39, 42, 47, 0.78));
+      transform: translateY(-1px);
+    }
 
-        .run-btn:hover { background: #333333; }
-        .run-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+    .task-top {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      align-items: flex-start;
+      margin-bottom: 10px;
+    }
 
-        /* ── Terminal ───────────────────────────────── */
-        .terminal-section {
-            display: flex;
-            flex-direction: column;
-            overflow: hidden;
-        }
+    .task-name {
+      font-size: 20px;
+      font-weight: 800;
+      line-height: 1.2;
+      letter-spacing: -0.03em;
+    }
 
-        .terminal-header {
-            background: var(--bg-elevated);
-            border-bottom: 1px solid var(--border-subtle);
-            padding: 10px 20px;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            font-size: 12px;
-            font-weight: 600;
-            color: var(--text-secondary);
-        }
+    .badge {
+      flex-shrink: 0;
+      border-radius: 999px;
+      padding: 6px 10px;
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      border: 1px solid var(--border-strong);
+    }
 
-        .terminal-dot {
-            width: 8px;
-            height: 8px;
-            border-radius: 50%;
-            background: var(--accent-emerald);
-            animation: blink 3s infinite;
-        }
+    .easy { color: var(--green); background: rgba(149, 212, 127, 0.12); }
+    .medium { color: var(--amber); background: rgba(228, 195, 111, 0.12); }
+    .hard { color: var(--red); background: rgba(238, 116, 106, 0.12); }
 
-        @keyframes blink {
-            0%, 90%, 100% { opacity: 1; }
-            95% { opacity: 0.3; }
-        }
+    .task-description {
+      color: var(--text-soft);
+      font-size: 14px;
+      line-height: 1.62;
+      margin-bottom: 12px;
+      overflow-wrap: anywhere;
+    }
 
-        .terminal-body {
-            flex: 1;
-            background: var(--bg-base);
-            padding: 16px 20px;
-            overflow-y: auto;
-            font-family: var(--font-mono);
-            font-size: 12px;
-            line-height: 1.7;
-        }
+    .task-meta,
+    .task-score {
+      font-size: 13px;
+      color: var(--text-muted);
+    }
 
-        .log-entry { margin-bottom: 6px; word-wrap: break-word; }
-        .log-step { color: var(--accent-blue); }
-        .log-action { color: var(--accent-cyan); font-weight: 500; }
-        .log-reward-pos { color: var(--accent-emerald); }
-        .log-reward-neg { color: var(--accent-red); }
-        .log-feedback { color: var(--text-secondary); }
-        .log-system { color: var(--accent-violet); font-weight: 500; }
-        .log-error { color: var(--accent-red); font-weight: 600; }
-        .log-score { color: var(--accent-amber); font-weight: 700; font-size: 14px; }
+    .task-score {
+      margin-top: 8px;
+      color: var(--green);
+      font-weight: 700;
+      font-family: var(--font-mono);
+    }
 
-        /* ── Info Panel ─────────────────────────────── */
-        .info-panel {
-            background: var(--bg-surface);
-            border-left: 1px solid var(--border-subtle);
-            padding: 20px;
-            display: flex;
-            flex-direction: column;
-            gap: 16px;
-            overflow-y: auto;
-        }
+    .button-stack {
+      display: grid;
+      gap: 10px;
+      margin-top: 16px;
+    }
 
-        .info-section {
-            background: var(--bg-elevated);
-            border: 1px solid var(--border-subtle);
-            border-radius: var(--radius-md);
-            padding: 14px;
-        }
+    button {
+      appearance: none;
+      width: 100%;
+      border: 1px solid var(--border-strong);
+      background: rgba(255, 255, 255, 0.03);
+      color: var(--text);
+      border-radius: var(--radius-md);
+      padding: 14px 16px;
+      font-family: var(--font-sans);
+      font-size: 15px;
+      font-weight: 800;
+      letter-spacing: -0.01em;
+      cursor: pointer;
+      transition: border-color 0.18s ease, transform 0.18s ease, background 0.18s ease;
+    }
 
-        .info-label {
-            font-size: 10px;
-            font-weight: 700;
-            text-transform: uppercase;
-            letter-spacing: 0.08em;
-            color: var(--text-muted);
-            margin-bottom: 8px;
-        }
+    button:hover {
+      border-color: rgba(120, 174, 252, 0.75);
+      transform: translateY(-1px);
+    }
 
-        .info-value {
-            font-family: var(--font-mono);
-            font-size: 24px;
-            font-weight: 700;
-        }
+    .primary {
+      background: linear-gradient(135deg, rgba(63, 111, 168, 0.34), rgba(73, 110, 94, 0.28));
+    }
 
-        .metric-grid {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 10px;
-        }
+    .console {
+      display: grid;
+      gap: 16px;
+      min-width: 0;
+    }
 
-        .metric-item {
-            background: var(--bg-overlay);
-            border: 1px solid var(--border-subtle);
-            border-radius: var(--radius-sm);
-            padding: 10px;
-            text-align: center;
-        }
+    .pill-row {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
 
-        .metric-number {
-            font-family: var(--font-mono);
-            font-size: 18px;
-            font-weight: 700;
-        }
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      border-radius: 999px;
+      padding: 7px 10px;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid var(--border);
+      color: var(--text-muted);
+      font-size: 12px;
+      font-weight: 700;
+    }
 
-        .metric-label {
-            font-size: 10px;
-            color: var(--text-muted);
-            margin-top: 2px;
-        }
+    textarea,
+    pre {
+      width: 100%;
+      min-width: 0;
+      margin: 0;
+      background: #0f1012;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: var(--radius-lg);
+      color: var(--text);
+      font-family: var(--font-mono);
+      font-size: 13px;
+      line-height: 1.7;
+      white-space: pre-wrap;
+      word-break: break-word;
+      overflow-wrap: anywhere;
+    }
 
-        .progress-bar {
-            width: 100%;
-            height: 6px;
-            background: var(--bg-overlay);
-            border-radius: 3px;
-            overflow: hidden;
-            margin-top: 8px;
-        }
+    textarea {
+      min-height: 180px;
+      resize: vertical;
+      padding: 16px;
+    }
 
-        .progress-fill {
-            height: 100%;
-            border-radius: 3px;
-            background: var(--accent-blue);
-            transition: width 0.5s ease;
-        }
+    pre {
+      padding: 16px;
+      overflow: auto;
+      max-height: 360px;
+    }
 
-        .legal-citations {
-            list-style: none;
-            padding: 0;
-        }
+    .trajectory {
+      max-height: 410px;
+    }
 
-        .legal-citations li {
-            font-size: 11px;
-            color: var(--text-secondary);
-            padding: 4px 0;
-            border-bottom: 1px solid rgba(42, 47, 62, 0.5);
-        }
+    .state-column {
+      display: grid;
+      gap: 14px;
+      min-width: 0;
+    }
 
-        .legal-citations li:last-child { border-bottom: none; }
+    .state-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+    }
 
-        .citation-label {
-            font-weight: 600;
-            color: var(--accent-cyan);
-        }
+    .state-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 14px 16px;
+      min-width: 0;
+    }
 
-        .findings-display {
-            font-family: var(--font-mono);
-            font-size: 11px;
-            color: var(--text-secondary);
-            white-space: pre-wrap;
-            word-break: break-all;
-            max-height: 200px;
-            overflow-y: auto;
-            background: var(--bg-base);
-            padding: 8px;
-            border-radius: var(--radius-sm);
-        }
+    .state-card label {
+      display: block;
+      color: var(--text-muted);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      margin-bottom: 10px;
+    }
 
-        /* ── Responsive ─────────────────────────────── */
-        @media (max-width: 1100px) {
-            .main-container { grid-template-columns: 1fr; }
-            .sidebar, .info-panel { display: none; }
-        }
-    </style>
+    .state-card .value {
+      font-size: 26px;
+      font-weight: 800;
+      line-height: 1.15;
+      letter-spacing: -0.03em;
+      overflow-wrap: anywhere;
+    }
+
+    .state-card .value.small {
+      font-size: 18px;
+      line-height: 1.45;
+    }
+
+    .accent-blue { color: var(--blue); }
+    .accent-green { color: var(--green); }
+    .accent-amber { color: var(--amber); }
+    .accent-red { color: var(--red); }
+
+    .summary-card {
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 16px;
+    }
+
+    .summary-card p,
+    .summary-card ul {
+      margin: 0;
+      color: var(--text-soft);
+      font-size: 14px;
+      line-height: 1.7;
+      overflow-wrap: anywhere;
+    }
+
+    .summary-card ul {
+      padding-left: 18px;
+    }
+
+    .summary-card li + li {
+      margin-top: 6px;
+    }
+
+    .observation-preview {
+      display: grid;
+      gap: 12px;
+    }
+
+    details {
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      background: rgba(255, 255, 255, 0.02);
+      overflow: hidden;
+    }
+
+    summary {
+      list-style: none;
+      cursor: pointer;
+      padding: 14px 16px;
+      color: var(--text);
+      font-size: 14px;
+      font-weight: 700;
+      letter-spacing: 0.01em;
+    }
+
+    summary::-webkit-details-marker { display: none; }
+
+    .details-body {
+      padding: 0 16px 16px;
+    }
+
+    .footer-note {
+      color: var(--text-muted);
+      font-size: 12px;
+      line-height: 1.65;
+      margin-top: 4px;
+    }
+
+    @media (max-width: 1320px) {
+      .layout {
+        grid-template-columns: 300px minmax(0, 1fr);
+      }
+
+      .state-pane {
+        grid-column: 1 / -1;
+      }
+    }
+
+    @media (max-width: 1080px) {
+      body { padding: 16px; }
+
+      .hero,
+      .layout {
+        grid-template-columns: 1fr;
+      }
+
+      .state-grid,
+      .mini-grid {
+        grid-template-columns: 1fr 1fr;
+      }
+    }
+
+    @media (max-width: 680px) {
+      .state-grid,
+      .mini-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
 </head>
 <body>
-    <div class="header">
-        <div class="header-brand">
-            <div class="header-logo">⚖</div>
+  <div class="shell">
+    <section class="hero">
+      <div class="panel">
+        <div class="panel-inner">
+          <div class="eyebrow">Law + OpenEnv</div>
+          <h1>LexCrisis</h1>
+          <div class="hero-copy">
+            A legal operations incident-response benchmark for <strong>product-liability litigation</strong>.
+            The current case study is pharmaceutical, but the benchmark is meant to represent broader
+            regulated-industry legal workflows: conflicts, privilege, deadlines, adversarial discovery,
+            and ethical escalation under pressure.
+          </div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-inner">
+          <div class="mini-grid">
+            <div class="mini-card">
+              <label>Domain</label>
+              <div>Law</div>
+            </div>
+            <div class="mini-card">
+              <label>Tasks</label>
+              <div>3</div>
+            </div>
+            <div class="mini-card">
+              <label>Scenario</label>
+              <div>Product Liability</div>
+            </div>
+            <div class="mini-card">
+              <label>Focus</label>
+              <div>Legal Ops</div>
+            </div>
+          </div>
+
+          <div class="hero-strip">
+            <div class="hero-pill">
+              <label>Track One</label>
+              <div>Conflict screening and intake discipline</div>
+            </div>
+            <div class="hero-pill">
+              <label>Track Two</label>
+              <div>Privilege review with waiver exposure</div>
+            </div>
+            <div class="hero-pill">
+              <label>Track Three</label>
+              <div>Deadline triage under live litigation pressure</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="layout">
+      <aside class="panel">
+        <div class="panel-inner">
+          <h2 class="section-title">Tasks</h2>
+          <div class="tasks" id="taskList"></div>
+          <div class="button-stack">
+            <button class="primary" onclick="resetEpisode()">Reset Task</button>
+            <button onclick="runBaseline()">Run Scripted Baseline</button>
+          </div>
+          <div class="footer-note">
+            Deterministic reference policy for comparison.
+          </div>
+        </div>
+      </aside>
+
+      <main class="panel">
+        <div class="panel-inner">
+          <h2 class="section-title">Action Console</h2>
+          <div class="console">
+            <div class="pill-row">
+              <span class="pill">POST /reset</span>
+              <span class="pill">POST /step</span>
+              <span class="pill">GET /state</span>
+              <span class="pill">GET /episode</span>
+            </div>
+
+            <textarea id="actionInput" spellcheck="false"></textarea>
+
+            <div class="button-stack" style="margin-top: 0;">
+              <button class="primary" onclick="submitAction()">Send Action</button>
+              <button onclick="refreshAll()">Refresh State</button>
+            </div>
+
             <div>
-                <div class="header-title">LexCrisis</div>
-                <div class="header-subtitle">Legal Crisis Management • OpenEnv v2.0</div>
+              <h2 class="section-title" style="margin-bottom: 10px;">Trajectory</h2>
+              <pre id="actionLog" class="trajectory"></pre>
             </div>
+          </div>
         </div>
-        <div class="header-status">
-            <span class="status-badge status-ready" id="statusBadge">● READY</span>
+      </main>
+
+      <aside class="panel state-pane">
+        <div class="panel-inner state-column">
+          <h2 class="section-title">Episode State</h2>
+
+          <div class="state-grid">
+            <div class="state-card">
+              <label>Task</label>
+              <div class="value small" id="taskName">Conflict-Safe Client Intake</div>
+            </div>
+            <div class="state-card">
+              <label>Difficulty</label>
+              <div class="value accent-blue" id="difficultyValue">Easy</div>
+            </div>
+            <div class="state-card">
+              <label>Done</label>
+              <div class="value accent-amber" id="doneValue">false</div>
+            </div>
+            <div class="state-card">
+              <label>Step</label>
+              <div class="value" id="stepCount">0</div>
+            </div>
+            <div class="state-card">
+              <label>Last Reward</label>
+              <div class="value" id="lastReward">0.00</div>
+            </div>
+            <div class="state-card">
+              <label>Score</label>
+              <div class="value accent-green" id="scoreValue">0.0000</div>
+            </div>
+          </div>
+
+          <div class="summary-card">
+            <h2 class="section-title" style="margin-bottom: 10px;">Last Reward Reason</h2>
+            <p id="rewardReason">Reset the task or send an action to see reward reasoning.</p>
+          </div>
+
+          <div class="summary-card">
+            <h2 class="section-title" style="margin-bottom: 10px;">Agent Findings</h2>
+            <div id="findingsSummary"></div>
+          </div>
+
+          <div class="summary-card observation-preview">
+            <h2 class="section-title" style="margin-bottom: 2px;">Observation Preview</h2>
+            <div id="observationSummary"></div>
+
+            <details>
+              <summary>Open raw state JSON</summary>
+              <div class="details-body">
+                <pre id="stateView"></pre>
+              </div>
+            </details>
+          </div>
         </div>
-    </div>
+      </aside>
+    </section>
+  </div>
 
-    <div class="main-container">
-        <!-- Sidebar: Tasks -->
-        <div class="sidebar">
-            <div class="sidebar-title">Tasks</div>
+  <script>
+    let currentTask = "task_1";
+    let baselines = {};
+    let latestState = null;
+    let latestEpisode = {
+      done: false,
+      score: 0,
+      last_reward: 0,
+      last_reward_reason: "Reset the task or send an action to see reward reasoning."
+    };
 
-            <div class="task-card active" id="card-task_1" onclick="selectTask('task_1')">
-                <div class="task-card-header">
-                    <span class="task-name">Conflict Screening</span>
-                    <span class="difficulty-badge diff-easy">Easy</span>
-                </div>
-                <div class="task-meta">15 steps • BCI Rules 22, 33</div>
-                <div class="task-score" id="score-task_1">—</div>
-            </div>
+    function setActionTemplate(action) {
+      document.getElementById("actionInput").value = JSON.stringify(action, null, 2);
+    }
 
-            <div class="task-card" id="card-task_2" onclick="selectTask('task_2')">
-                <div class="task-card-header">
-                    <span class="task-name">Privilege Review</span>
-                    <span class="difficulty-badge diff-medium">Medium</span>
-                </div>
-                <div class="task-meta">25 steps • IEA Sec 126, 129</div>
-                <div class="task-score" id="score-task_2">—</div>
-            </div>
+    function safeJson(value) {
+      return JSON.stringify(value, null, 2);
+    }
 
-            <div class="task-card" id="card-task_3" onclick="selectTask('task_3')">
-                <div class="task-card-header">
-                    <span class="task-name">Crisis Triage</span>
-                    <span class="difficulty-badge diff-hard">Hard</span>
-                </div>
-                <div class="task-meta">40 steps • CPC Order XI, IEA Sec 45</div>
-                <div class="task-score" id="score-task_3">—</div>
-            </div>
+    function clip(text, limit = 900) {
+      if (!text) return "";
+      return text.length > limit ? `${text.slice(0, limit)}...` : text;
+    }
 
-            <button class="run-btn" id="runBtn" onclick="runEpisode()">▶ Run Episode</button>
-            <button class="run-btn" id="resetBtn" onclick="resetEpisode()" style="background: var(--bg-overlay); border: 1px solid var(--border-strong);">↻ Reset</button>
-        </div>
+    function appendLog(label, payload) {
+      const node = document.getElementById("actionLog");
+      const block = typeof payload === "string" ? payload : safeJson(payload);
+      const prefix = node.textContent ? "\n\n" : "";
+      node.textContent += `${prefix}${label}\n${block}`;
+      node.scrollTop = node.scrollHeight;
+    }
 
-        <!-- Terminal -->
-        <div class="terminal-section">
-            <div class="terminal-header">
-                <div class="terminal-dot"></div>
-                <span>AGENT TRAJECTORY</span>
-                <span style="margin-left: auto; color: var(--text-muted);" id="termInfo">Ready</span>
-            </div>
-            <div class="terminal-body" id="terminalBody">
-                <div class="log-entry log-system">╔══════════════════════════════════════════════════════╗</div>
-                <div class="log-entry log-system">║  LexCrisis — Legal Crisis Management Environment    ║</div>
-                <div class="log-entry log-system">║  OpenEnv v2.0 • Meta PyTorch Hackathon 2026          ║</div>
-                <div class="log-entry log-system">╚══════════════════════════════════════════════════════╝</div>
-                <div class="log-entry log-feedback">
-                    <br>This environment simulates multi-dimensional legal crisis
-                    management requiring simultaneous reasoning about:<br>
-                    &nbsp; • Conflict of Interest (BCI Rules 22, 33)<br>
-                    &nbsp; • Privilege Review (IEA Sec 126, 129)<br>
-                    &nbsp; • Evidence Preservation (CPC Order XI)<br>
-                    &nbsp; • Adversarial Litigation Tactics<br>
-                    &nbsp; • Ethical Constraints with Cascading Consequences<br><br>
-                    Select a task and click "Run Episode" to begin.
-                </div>
-            </div>
-        </div>
+    function formatNumber(value, digits = 2) {
+      return Number(value ?? 0).toFixed(digits);
+    }
 
-        <!-- Info Panel -->
-        <div class="info-panel">
-            <div class="sidebar-title">Episode State</div>
+    function renderFindingsSummary(state) {
+      const findings = state?.observation?.findings ?? {};
+      const taskId = state?.observation?.task_id ?? currentTask;
+      const container = document.getElementById("findingsSummary");
 
-            <div class="metric-grid">
-                <div class="metric-item">
-                    <div class="metric-number" id="metricStep">0</div>
-                    <div class="metric-label">Step</div>
-                </div>
-                <div class="metric-item">
-                    <div class="metric-number" id="metricMaxSteps">15</div>
-                    <div class="metric-label">Max Steps</div>
-                </div>
-                <div class="metric-item">
-                    <div class="metric-number" id="metricReward" style="color: var(--accent-emerald);">0.00</div>
-                    <div class="metric-label">Cumulative Reward</div>
-                </div>
-                <div class="metric-item">
-                    <div class="metric-number" id="metricScore" style="color: var(--accent-amber);">0.00</div>
-                    <div class="metric-label">Score</div>
-                </div>
-            </div>
+      let lines = [];
 
-            <div class="info-section">
-                <div class="info-label">Grader Progress</div>
-                <div class="progress-bar">
-                    <div class="progress-fill" id="progressFill" style="width: 0%;"></div>
-                </div>
-            </div>
+      if (taskId === "task_1") {
+        const decisions = Object.entries(findings.decisions || {})
+          .map(([clientId, decision]) => `${clientId} -> ${decision}`)
+          .join("; ");
+        lines = [
+          `Reviewed clients: ${(findings.reviewed_clients || []).join(", ") || "none yet"}`,
+          `Conflicts identified: ${(findings.conflicts_identified || []).map((entry) => `${entry.client_a}/${entry.client_b}`).join(", ") || "none yet"}`,
+          `Rule citations: ${(findings.rule_citations || []).map((entry) => `${entry.client_a}/${entry.client_b}: ${entry.rule}`).join("; ") || "none yet"}`,
+          `Decisions made: ${decisions || "none yet"}`
+        ];
+      } else if (taskId === "task_2") {
+        const classifications = Object.entries(findings.privilege_classifications || {})
+          .map(([docId, value]) => `${docId} -> ${value.classification}`)
+          .join("; ");
+        const recommendations = Object.entries(findings.recommendations || {})
+          .map(([docId, value]) => `${docId} -> ${value.action}`)
+          .join("; ");
+        lines = [
+          `Reviewed documents: ${(findings.reviewed_documents || []).join(", ") || "none yet"}`,
+          `Privilege classifications: ${classifications || "none yet"}`,
+          `Waivers identified: ${(findings.waivers_identified || []).map((entry) => `${entry.doc_id}: ${entry.waiver_type}`).join("; ") || "none yet"}`,
+          `Exceptions identified: ${(findings.exceptions_identified || []).map((entry) => `${entry.doc_id}: ${entry.exception_type}`).join("; ") || "none yet"}`,
+          `Recommendations: ${recommendations || "none yet"}`
+        ];
+      } else {
+        const deadlinesMet = Object.keys(findings.deadlines_met || {});
+        lines = [
+          `Reviewed events: ${(findings.reviewed_events || []).join(", ") || "none yet"}`,
+          `Deadline actions taken: ${deadlinesMet.join(", ") || "none yet"}`,
+          `Adversarial issues flagged: ${(findings.adversarial_flagged || []).map((entry) => `${entry.item_id}: ${entry.threat_type}`).join("; ") || "none yet"}`,
+          `Ethical issues flagged: ${(findings.ethical_issues_flagged || []).map((entry) => `${entry.issue_type}`).join("; ") || "none yet"}`,
+          `Discovery response recorded: ${Object.keys(findings.discovery_response || {}).length > 0 ? findings.discovery_response.response_type : "none yet"}`
+        ];
+      }
 
-            <div class="info-section">
-                <div class="info-label">Legal Framework</div>
-                <ul class="legal-citations" id="legalCitations">
-                    <li><span class="citation-label">BCI Rule 22:</span> Advising Opposite Party</li>
-                    <li><span class="citation-label">BCI Rule 33:</span> Acting Against Former Client</li>
-                    <li><span class="citation-label">IEA Sec 126:</span> Professional Communications</li>
-                    <li><span class="citation-label">IEA Sec 129:</span> Confidential Communications</li>
-                    <li><span class="citation-label">CPC Order XI:</span> Discovery and Inspection</li>
-                    <li><span class="citation-label">IEA Sec 45:</span> Opinions of Experts</li>
-                </ul>
-            </div>
+      const hasSignal = !lines.every((line) => line.endsWith("none yet"));
+      if (!hasSignal) {
+        container.innerHTML = `
+          <p>
+            No structured findings recorded for this episode yet.
+          </p>
+        `;
+        return;
+      }
 
-            <div class="info-section">
-                <div class="info-label">Agent Findings</div>
-                <div class="findings-display" id="findingsDisplay">{}</div>
-            </div>
-        </div>
-    </div>
+      container.innerHTML = `<ul>${lines.map((line) => `<li>${line}</li>`).join("")}</ul>`;
+    }
 
-    <script>
-        let currentTask = 'task_1';
-        let isRunning = false;
+    function renderObservationSummary(state, episode) {
+      const observation = state?.observation || {};
+      const summary = document.getElementById("observationSummary");
+      const deadlines = (observation.active_deadlines || []).map(
+        (deadline) => `${deadline.title} (${deadline.steps_remaining} steps left)`
+      );
+      const actions = (observation.available_actions || []).join(", ");
+      const content = observation.current_content ? clip(observation.current_content, 700) : "Nothing opened yet.";
 
-        function selectTask(taskId) {
-            document.querySelectorAll('.task-card').forEach(c => c.classList.remove('active'));
-            document.getElementById('card-' + taskId).classList.add('active');
-            currentTask = taskId;
-            const maxSteps = {task_1: 15, task_2: 25, task_3: 40};
-            document.getElementById('metricMaxSteps').textContent = maxSteps[taskId] || 15;
+      summary.innerHTML = `
+        <p><strong>Task objective:</strong> ${observation.task_description || "No task loaded."}</p>
+        <p><strong>Available actions:</strong> ${actions || "No actions listed."}</p>
+        <p><strong>Active deadlines:</strong> ${deadlines.length ? deadlines.join("; ") : "None right now."}</p>
+        <p><strong>Current content:</strong> ${content}</p>
+        <p><strong>Feedback:</strong> ${observation.feedback || "No feedback yet."}</p>
+        <p><strong>Done:</strong> ${episode.done ? "true" : "false"}</p>
+      `;
+    }
+
+    function updateTaskScore(taskId, score) {
+      const node = document.getElementById(`score-${taskId}`);
+      if (node) {
+        node.textContent = score == null ? "Score --" : `Score ${Number(score).toFixed(4)}`;
+      }
+    }
+
+    function difficultyClass(value) {
+      const difficulty = String(value || "").toLowerCase();
+      if (difficulty === "easy") return "accent-green";
+      if (difficulty === "medium") return "accent-amber";
+      if (difficulty === "hard") return "accent-red";
+      return "accent-blue";
+    }
+
+    function buildSuggestedAction(state) {
+      const observation = state?.observation || {};
+      const findings = observation.findings || {};
+      const taskId = observation.task_id || currentTask;
+
+      if (taskId === "task_1") {
+        const reviewed = findings.reviewed_clients || [];
+        const conflicts = findings.conflicts_identified || [];
+        const citations = findings.rule_citations || [];
+        const decisions = findings.decisions || {};
+        const hasConflict = conflicts.some((entry) => {
+          const pair = [entry.client_a, entry.client_b].sort().join("|");
+          return pair === ["CLIENT-001", "CLIENT-003"].sort().join("|");
+        });
+        const hasCitation = citations.some((entry) => {
+          const pair = [entry.client_a, entry.client_b].sort().join("|");
+          return pair === ["CLIENT-001", "CLIENT-003"].sort().join("|");
+        });
+
+        if (!reviewed.includes("CLIENT-001")) {
+          return { action_type: "review_client", parameters: { client_id: "CLIENT-001" } };
         }
-
-        function log(msg, cls = 'log-feedback') {
-            const body = document.getElementById('terminalBody');
-            const div = document.createElement('div');
-            div.className = 'log-entry ' + cls;
-            div.innerHTML = msg;
-            body.appendChild(div);
-            body.scrollTop = body.scrollHeight;
+        if (!reviewed.includes("CLIENT-003")) {
+          return { action_type: "review_client", parameters: { client_id: "CLIENT-003" } };
         }
-
-        function updateMetrics(state) {
-            document.getElementById('metricStep').textContent = state.step_count || 0;
-            document.getElementById('metricReward').textContent = (state.cumulative_reward || 0).toFixed(4);
-            document.getElementById('metricScore').textContent = (state.score || 0).toFixed(4);
-            document.getElementById('progressFill').style.width = ((state.score || 0) * 100) + '%';
-
-            const scoreColor = (state.score || 0) > 0.5 ? 'var(--accent-emerald)' :
-                              (state.score || 0) > 0.2 ? 'var(--accent-amber)' : 'var(--accent-red)';
-            document.getElementById('metricScore').style.color = scoreColor;
+        if (!hasConflict) {
+          return { action_type: "check_conflict", parameters: { client_a: "CLIENT-001", client_b: "CLIENT-003" } };
         }
-
-        function updateFindings(findings) {
-            const el = document.getElementById('findingsDisplay');
-            el.textContent = JSON.stringify(findings || {}, null, 2);
+        if (!hasCitation) {
+          return {
+            action_type: "cite_rule",
+            parameters: { client_a: "CLIENT-001", client_b: "CLIENT-003", rule: "BCI Rule 33" }
+          };
         }
+        if (!decisions["CLIENT-001"]) return { action_type: "accept_client", parameters: { client_id: "CLIENT-001" } };
+        if (!decisions["CLIENT-002"]) return { action_type: "accept_client", parameters: { client_id: "CLIENT-002" } };
+        if (!decisions["CLIENT-003"]) return { action_type: "decline_client", parameters: { client_id: "CLIENT-003" } };
+        if (!decisions["CLIENT-004"]) return { action_type: "decline_client", parameters: { client_id: "CLIENT-004" } };
+        if (!decisions["CLIENT-005"]) return { action_type: "decline_client", parameters: { client_id: "CLIENT-005" } };
+        if (!decisions["CLIENT-006"]) return { action_type: "accept_client", parameters: { client_id: "CLIENT-006" } };
+        return { action_type: "submit_intake", parameters: {} };
+      }
 
-        async function resetEpisode() {
-            try {
-                const resp = await fetch('/reset', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({task_id: currentTask})
-                });
-                const data = await resp.json();
-                document.getElementById('terminalBody').innerHTML = '';
-                log('Environment reset: ' + currentTask, 'log-system');
-                if (data.observation) {
-                    log(data.observation.feedback || 'Ready.', 'log-feedback');
-                    updateFindings(data.observation.findings);
-                }
-                updateMetrics({step_count: 0, cumulative_reward: 0, score: 0});
-                document.getElementById('statusBadge').className = 'status-badge status-ready';
-                document.getElementById('statusBadge').textContent = '● READY';
-                document.getElementById('termInfo').textContent = currentTask;
-            } catch(e) {
-                log('Reset failed: ' + e.message, 'log-error');
+      if (taskId === "task_2") {
+        const reviewed = findings.reviewed_documents || [];
+        const classifications = findings.privilege_classifications || {};
+        const waivers = findings.waivers_identified || [];
+        const exceptions = findings.exceptions_identified || [];
+        const recommendations = findings.recommendations || {};
+
+        if (!reviewed.includes("DOC-001")) return { action_type: "review_document", parameters: { doc_id: "DOC-001" } };
+        if (!classifications["DOC-001"]) {
+          return {
+            action_type: "classify_privilege",
+            parameters: { doc_id: "DOC-001", classification: "attorney_client", doctrine: "IEA Section 126" }
+          };
+        }
+        if (!recommendations["DOC-001"]) {
+          return { action_type: "recommend_action", parameters: { doc_id: "DOC-001", action: "withhold" } };
+        }
+        if (!reviewed.includes("DOC-006")) return { action_type: "review_document", parameters: { doc_id: "DOC-006" } };
+        if (!classifications["DOC-006"]) {
+          return {
+            action_type: "classify_privilege",
+            parameters: { doc_id: "DOC-006", classification: "waived", doctrine: "Crime-fraud exception" }
+          };
+        }
+        if (!waivers.some((entry) => entry.doc_id === "DOC-006")) {
+          return {
+            action_type: "identify_waiver",
+            parameters: {
+              doc_id: "DOC-006",
+              waiver_type: "crime_fraud",
+              explanation: "Instruction to destroy evidence defeats privilege."
             }
+          };
         }
-
-        async function runEpisode() {
-            if (isRunning) return;
-            isRunning = true;
-
-            document.getElementById('runBtn').disabled = true;
-            document.getElementById('statusBadge').className = 'status-badge status-running';
-            document.getElementById('statusBadge').textContent = '● RUNNING';
-            document.getElementById('terminalBody').innerHTML = '';
-
-            log('Starting episode: ' + currentTask, 'log-system');
-
-            try {
-                // Reset
-                const resetResp = await fetch('/reset', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({task_id: currentTask})
-                });
-                const resetData = await resetResp.json();
-                const obs = resetData.observation;
-                log('✓ Environment initialized', 'log-system');
-                log('Task: ' + (obs.task_id || currentTask), 'log-feedback');
-
-                // Demo: send a sequence of reasonable actions
-                const sequences = {
-                    task_1: [
-                        {action_type: 'review_client', parameters: {client_id: 'CLIENT-001'}},
-                        {action_type: 'review_client', parameters: {client_id: 'CLIENT-002'}},
-                        {action_type: 'review_client', parameters: {client_id: 'CLIENT-003'}},
-                        {action_type: 'check_conflict', parameters: {client_a: 'CLIENT-001', client_b: 'CLIENT-003'}},
-                        {action_type: 'cite_rule', parameters: {client_a: 'CLIENT-001', client_b: 'CLIENT-003', rule: 'BCI Rule 33'}},
-                        {action_type: 'accept_client', parameters: {client_id: 'CLIENT-001', justification: 'Plaintiff — no internal conflicts'}},
-                        {action_type: 'decline_client', parameters: {client_id: 'CLIENT-003', reason: 'Direct adversity with plaintiffs'}},
-                        {action_type: 'submit_intake', parameters: {}}
-                    ],
-                    task_2: [
-                        {action_type: 'review_document', parameters: {doc_id: 'DOC-001'}},
-                        {action_type: 'classify_privilege', parameters: {doc_id: 'DOC-001', classification: 'attorney_client', doctrine: 'IEA Sec 126'}},
-                        {action_type: 'review_document', parameters: {doc_id: 'DOC-004'}},
-                        {action_type: 'classify_privilege', parameters: {doc_id: 'DOC-004', classification: 'none', doctrine: 'Business communication'}},
-                        {action_type: 'review_document', parameters: {doc_id: 'DOC-006'}},
-                        {action_type: 'identify_waiver', parameters: {doc_id: 'DOC-006', waiver_type: 'crime_fraud', explanation: 'Attorney advising evidence concealment'}},
-                        {action_type: 'submit_review', parameters: {}}
-                    ],
-                    task_3: [
-                        {action_type: 'review_event', parameters: {event_id: 'EVENT-001'}},
-                        {action_type: 'issue_litigation_hold', parameters: {scope: 'All Veridex ESI', custodians: ['Morton', 'Ames', 'Wong', 'Liu', 'Park']}},
-                        {action_type: 'review_event', parameters: {event_id: 'EVENT-003'}},
-                        {action_type: 'flag_adversarial', parameters: {item_id: 'EVENT-003', threat_type: 'privilege_trap', explanation: 'Discovery designed to waive privilege'}},
-                        {action_type: 'review_event', parameters: {event_id: 'EVENT-004'}},
-                        {action_type: 'flag_ethical_issue', parameters: {issue_type: 'former_client_conflict', affected_clients: 'Chen, Torres, MedDistro', resolution: 'Identify conflict under BCI Rule 33 and withdraw'}},
-                        {action_type: 'submit_triage', parameters: {}}
-                    ]
-                };
-
-                const actions = sequences[currentTask] || sequences.task_1;
-
-                for (let i = 0; i < actions.length; i++) {
-                    await new Promise(r => setTimeout(r, 300)); // Pace for visibility
-
-                    const act = actions[i];
-                    log(`<span class="log-step">Step ${i+1}:</span> <span class="log-action">${act.action_type}</span>(${JSON.stringify(act.parameters).substring(0,60)})`, 'log-action');
-
-                    const stepResp = await fetch('/step', {
-                        method: 'POST',
-                        headers: {'Content-Type': 'application/json'},
-                        body: JSON.stringify(act)
-                    });
-                    const stepData = await stepResp.json();
-
-                    // Log reward
-                    const reward = stepData.reward || 0;
-                    if (reward > 0) {
-                        log(`  → reward: <span class="log-reward-pos">+${reward.toFixed(4)}</span>`, 'log-reward-pos');
-                    } else if (reward < 0) {
-                        log(`  → reward: <span class="log-reward-neg">${reward.toFixed(4)}</span>`, 'log-reward-neg');
-                    }
-
-                    // Update state
-                    const stateResp = await fetch('/state');
-                    const stateData = await stateResp.json();
-                    updateMetrics(stateData);
-                    updateFindings(stateData.findings);
-
-                    if (stepData.done) {
-                        log(`<br><span class="log-score">═══ Final Score: ${(stepData.score || 0).toFixed(4)} ═══</span>`, 'log-score');
-                        document.getElementById('score-' + currentTask).textContent = (stepData.score || 0).toFixed(4);
-                        break;
-                    }
-                }
-            } catch(e) {
-                log('Error: ' + e.message, 'log-error');
+        if (!exceptions.some((entry) => entry.doc_id === "DOC-006")) {
+          return {
+            action_type: "identify_exception",
+            parameters: {
+              doc_id: "DOC-006",
+              exception_type: "crime_fraud",
+              explanation: "The communication furthers destruction of evidence."
             }
-
-            isRunning = false;
-            document.getElementById('runBtn').disabled = false;
-            document.getElementById('statusBadge').className = 'status-badge status-done';
-            document.getElementById('statusBadge').textContent = '● DONE';
+          };
         }
-    </script>
+        if (!recommendations["DOC-006"]) {
+          return { action_type: "recommend_action", parameters: { doc_id: "DOC-006", action: "produce" } };
+        }
+        if (!reviewed.includes("DOC-007")) return { action_type: "review_document", parameters: { doc_id: "DOC-007" } };
+        if (!waivers.some((entry) => entry.doc_id === "DOC-007")) {
+          return {
+            action_type: "identify_waiver",
+            parameters: {
+              doc_id: "DOC-007",
+              waiver_type: "at_issue",
+              explanation: "The draft places counsel's legal conclusion into public use."
+            }
+          };
+        }
+        return { action_type: "submit_review", parameters: {} };
+      }
+
+      const reviewed = findings.reviewed_events || [];
+      const deadlines = findings.deadlines_met || {};
+      const adversarial = findings.adversarial_flagged || [];
+      const ethics = findings.ethical_issues_flagged || [];
+      const discovery = findings.discovery_response || {};
+      const expert = findings.expert_assessed || {};
+
+      if (!reviewed.includes("EVENT-001")) return { action_type: "review_event", parameters: { event_id: "EVENT-001" } };
+      if (!deadlines["EVENT-001"]) {
+        return {
+          action_type: "issue_litigation_hold",
+          parameters: {
+            scope: "All Veridex custodial mail, chat, and product safety files.",
+            custodians: ["Morton", "Ames", "Wong", "Liu", "Park"]
+          }
+        };
+      }
+      if (!reviewed.includes("EVENT-004")) return { action_type: "review_event", parameters: { event_id: "EVENT-004" } };
+      if (!ethics.length) {
+        return {
+          action_type: "flag_ethical_issue",
+          parameters: {
+            issue_type: "former_client_conflict",
+            affected_clients: "MedDistro Ltd",
+            resolution: "Disclose the prior representation, screen the partner, and withdraw if consent is unavailable under BCI Rule 33."
+          }
+        };
+      }
+      if (!reviewed.includes("EVENT-002")) return { action_type: "review_event", parameters: { event_id: "EVENT-002" } };
+      if (!deadlines["EVENT-002"]) {
+        return {
+          action_type: "file_motion",
+          parameters: {
+            motion_type: "injunction_opposition",
+            court: "Bombay High Court",
+            arguments: "Plaintiffs cannot justify emergency relief before a full evidentiary record."
+          }
+        };
+      }
+      if (!reviewed.includes("EVENT-003")) return { action_type: "review_event", parameters: { event_id: "EVENT-003" } };
+      if (!adversarial.some((entry) => entry.item_id === "EVENT-003")) {
+        return {
+          action_type: "flag_adversarial",
+          parameters: {
+            item_id: "EVENT-003",
+            threat_type: "privilege_trap",
+            explanation: "The request targets advocate communications to pressure waiver."
+          }
+        };
+      }
+      if (!Object.keys(discovery).length) {
+        return {
+          action_type: "respond_discovery",
+          parameters: {
+            request_id: "REQ-14",
+            response_type: "privilege_log",
+            objections: "Object to advocate communications as privileged under IEA Sections 126 and 129 and produce a privilege log for withheld items."
+          }
+        };
+      }
+      if (!Object.keys(expert).length) {
+        return {
+          action_type: "assess_expert",
+          parameters: {
+            expert_id: "EXP-TOX-01",
+            qualification: "Special skill in toxicology and regulatory science, with relevant expertise under IEA Section 45."
+          }
+        };
+      }
+      return { action_type: "submit_triage", parameters: {} };
+    }
+
+    function updateUI() {
+      const state = latestState;
+      const episode = latestEpisode;
+      const observation = state?.observation || {};
+
+      document.getElementById("taskName").textContent = observation.task_name || currentTask;
+      document.getElementById("difficultyValue").textContent = observation.difficulty || "--";
+      document.getElementById("difficultyValue").className = `value ${difficultyClass(observation.difficulty)}`;
+      document.getElementById("doneValue").textContent = episode.done ? "true" : "false";
+      document.getElementById("doneValue").className = `value ${episode.done ? "accent-green" : "accent-amber"}`;
+      document.getElementById("stepCount").textContent = observation.step_count ?? 0;
+      document.getElementById("lastReward").textContent = formatNumber(state?.reward, 2);
+      document.getElementById("lastReward").className = `value ${Number(state?.reward ?? 0) < 0 ? "accent-red" : Number(state?.reward ?? 0) > 0 ? "accent-green" : ""}`;
+      document.getElementById("scoreValue").textContent = formatNumber(episode.score, 4);
+      document.getElementById("rewardReason").textContent = episode.last_reward_reason || "No reward explanation available.";
+      document.getElementById("stateView").textContent = safeJson(state || {});
+
+      renderFindingsSummary(state);
+      renderObservationSummary(state, episode);
+
+      if (observation.task_id) {
+        updateTaskScore(observation.task_id, episode.score);
+      }
+    }
+
+    async function callJson(url, options = {}) {
+      const response = await fetch(url, options);
+      const payload = await response.json();
+      if (!response.ok) {
+        throw new Error(safeJson(payload));
+      }
+      return payload;
+    }
+
+    async function refreshTasks() {
+      const payload = await callJson("/tasks");
+      const baselinePayload = await callJson("/baselines");
+      baselines = baselinePayload.baselines || {};
+
+      const container = document.getElementById("taskList");
+      container.innerHTML = "";
+
+      payload.tasks.forEach((task, index) => {
+        const card = document.createElement("div");
+        card.className = `task-card${index === 0 ? " active" : ""}`;
+        card.dataset.taskId = task.task_id;
+        card.innerHTML = `
+          <div class="task-top">
+            <div class="task-name">${task.name}</div>
+            <div class="badge ${task.difficulty}">${task.difficulty}</div>
+          </div>
+          <div class="task-description">${task.description}</div>
+          <div class="task-meta">${task.difficulty.toUpperCase()} - ${task.max_steps} steps</div>
+          <div class="task-score" id="score-${task.task_id}">Score --</div>
+        `;
+
+        card.onclick = async () => {
+          document.querySelectorAll(".task-card").forEach((entry) => entry.classList.remove("active"));
+          card.classList.add("active");
+          currentTask = task.task_id;
+          await resetEpisode();
+        };
+
+        container.appendChild(card);
+      });
+    }
+
+    async function resetEpisode() {
+      const payload = await callJson("/reset", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ task_id: currentTask })
+      });
+
+      latestState = {
+        observation: payload.observation,
+        reward: payload.reward,
+        done: payload.done
+      };
+      latestEpisode = await callJson("/episode");
+      appendLog("[RESET]", {
+        task: payload.observation.task_name,
+        done: payload.done,
+        note: "Episode reset."
+      });
+      setActionTemplate(buildSuggestedAction(latestState));
+      updateUI();
+    }
+
+    async function executeAction(action) {
+      const payload = await callJson("/step", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(action)
+      });
+
+      latestState = {
+        observation: payload.observation,
+        reward: payload.reward,
+        done: payload.done
+      };
+      latestEpisode = await callJson("/episode");
+
+      appendLog("[STEP]", {
+        action: action.action_type,
+        reward: Number(payload.reward).toFixed(2),
+        score: Number(payload.info?.score ?? latestEpisode.score ?? 0).toFixed(4),
+        done: payload.done,
+        reason: payload.info?.reward_breakdown?.reason || latestEpisode.last_reward_reason
+      });
+
+      if (payload.done) {
+        appendLog("[FINAL]", {
+          task: payload.observation.task_name,
+          final_score: Number(payload.info?.score ?? latestEpisode.score ?? 0).toFixed(4),
+          done: true
+        });
+      }
+
+      setActionTemplate(buildSuggestedAction(latestState));
+      updateUI();
+    }
+
+    async function submitAction() {
+      try {
+        const action = JSON.parse(document.getElementById("actionInput").value);
+        await executeAction(action);
+      } catch (error) {
+        appendLog("[ERROR]", { message: String(error) });
+      }
+    }
+
+    async function refreshAll() {
+      try {
+        latestState = await callJson("/state");
+        latestEpisode = await callJson("/episode");
+        setActionTemplate(buildSuggestedAction(latestState));
+        updateUI();
+        appendLog("[REFRESH]", {
+          task: latestState.observation?.task_name,
+          score: Number(latestEpisode.score ?? 0).toFixed(4),
+          done: latestEpisode.done
+        });
+      } catch (error) {
+        appendLog("[ERROR]", { message: String(error) });
+      }
+    }
+
+    async function runBaseline() {
+      const actions = baselines[currentTask] || [];
+      if (!actions.length) {
+        appendLog("[ERROR]", { message: "No scripted baseline was found for this task." });
+        return;
+      }
+
+      await resetEpisode();
+      for (const action of actions) {
+        setActionTemplate(action);
+        await executeAction(action);
+        if (latestEpisode.done) {
+          break;
+        }
+      }
+    }
+
+    refreshTasks()
+      .then(() => resetEpisode())
+      .catch((error) => appendLog("[ERROR]", { message: String(error) }));
+  </script>
 </body>
 </html>

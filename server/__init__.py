@@ -1,1 +1,1 @@
-"""LexCrisis Legal Crisis Management Environment."""
+"""Server package for the LexCrisis benchmark."""

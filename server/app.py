@@ -1,220 +1,231 @@
-"""
-FastAPI server for the LexCrisis Legal Environment.
+"""FastAPI server for the LexCrisis OpenEnv benchmark."""
 
-Exposes the OpenEnv-compliant endpoints: /reset, /step, /state, /health.
-Serves on port 7860 for Hugging Face Spaces compatibility.
-"""
+from __future__ import annotations
+
+import json
+from pathlib import Path
+from typing import Any, Dict
 
 from fastapi import FastAPI, Request
-from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse, JSONResponse
-from fastapi.staticfiles import StaticFiles
+from pydantic import ValidationError
 
-from server.environment import LegalDocEnvironment, ACTION_ALIASES
-from server.models import (
-    ActionRequest,
+from lexcrisis_env.env import BENCHMARK_NAME, BENCHMARK_VERSION, LexCrisisEnvironment
+from lexcrisis_env.models import (
+    Action,
+    EnvironmentState,
+    MetadataResponse,
+    Observation,
     ResetRequest,
+    ResetResponse,
+    StepResponse,
 )
+from lexcrisis_env.tasks import SCRIPTED_BASELINES, TASK_DEFINITIONS
+
+APP_DESCRIPTION = (
+    "LexCrisis is a law-focused environment for legal operations incident response in "
+    "high-stakes product-liability litigation. The current case study is pharmaceutical, "
+    "but the workflow generalizes to regulated-industry litigation more broadly. It "
+    "evaluates conflict screening, privilege review, and crisis triage under deadline pressure."
+)
+
+UI_PATH = Path(__file__).with_name("ui.html")
+ENVIRONMENT = LexCrisisEnvironment()
 
 app = FastAPI(
-    title="LexCrisis Legal Environment API",
-    description=(
-        "OpenEnv-compliant RL environment for multi-dimensional legal crisis management. "
-        "3 tasks: Client Conflict Screening, Privileged Document Review, Multi-Front Crisis Triage."
-    ),
-    version="2.0.0",
+    title="LexCrisis OpenEnv API",
+    version=BENCHMARK_VERSION,
+    description=APP_DESCRIPTION,
 )
 
-env = LegalDocEnvironment()
 
-
-# ── Convert 422 (Pydantic validation) to 400 for test compatibility ────────
-@app.exception_handler(RequestValidationError)
-async def validation_exception_handler(request: Request, exc: RequestValidationError):
-    return JSONResponse(
-        status_code=400,
-        content={
-            "detail": str(exc.errors()),
-            "type": "validation_error",
-            "field_required": True,
-        },
-    )
-
-
-@app.get("/")
-def read_root() -> FileResponse:
-    """Serve the LexCrisis web UI."""
-    return FileResponse("server/ui.html")
+@app.get("/", include_in_schema=False)
+def root() -> FileResponse:
+    response = FileResponse(UI_PATH)
+    response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+    response.headers["Pragma"] = "no-cache"
+    response.headers["Expires"] = "0"
+    return response
 
 
 @app.get("/health")
-def health_check() -> dict:
-    """Health check endpoint for HF Spaces and Docker."""
+def health() -> Dict[str, str]:
+    return {"status": "healthy"}
+
+
+@app.get("/metadata")
+def metadata() -> MetadataResponse:
+    return MetadataResponse(
+        name="LexCrisis",
+        description=APP_DESCRIPTION,
+        version=BENCHMARK_VERSION,
+        benchmark=BENCHMARK_NAME,
+        domain="legal-operations",
+        tags=["openenv", "law", "litigation", "legal-ops", "privilege-review"],
+    )
+
+
+@app.get("/schema")
+def schema() -> Dict[str, Any]:
     return {
-        "status": "ok",
-        "environment": "lexcrisis",
-        "version": "2.0.0",
-        "platform": "fastapi",
+        "action": Action.model_json_schema(),
+        "observation": Observation.model_json_schema(),
+        "state": EnvironmentState.model_json_schema(),
     }
+
+
+@app.get("/tasks")
+def tasks() -> Dict[str, Any]:
+    return {
+        "tasks": [
+            {
+                "task_id": task.task_id,
+                "name": task.name,
+                "difficulty": task.difficulty,
+                "description": task.description,
+                "max_steps": task.max_steps,
+                "baseline_steps": len(SCRIPTED_BASELINES[task.task_id]),
+            }
+            for task in TASK_DEFINITIONS.values()
+        ]
+    }
+
+
+@app.get("/baselines")
+def baselines() -> Dict[str, Any]:
+    return {"baselines": SCRIPTED_BASELINES}
+
+
+@app.get("/episode")
+def episode() -> Dict[str, Any]:
+    return ENVIRONMENT.episode_info()
 
 
 @app.post("/reset")
-def reset_env(payload: ResetRequest) -> dict:
-    """Reset the environment for a new episode.
-    
-    Returns a flattened response with episode_id, step_count, documents,
-    clients, and available_actions at the root level for broad compatibility.
-    """
-    # Accept both 'task_id' and 'task' fields
-    task = payload.task_id or payload.task or "task_1"
-    result = env.reset(task_id=task, episode_id=payload.episode_id)
-    obs = result.observation
+def reset(payload: ResetRequest) -> JSONResponse:
+    observation = ENVIRONMENT.reset(
+        task_id=payload.task_id,
+        seed=payload.seed,
+        episode_id=payload.episode_id,
+    )
+    result = ResetResponse(
+        observation=observation,
+        reward=0.0,
+        done=False,
+        info={"episode_id": ENVIRONMENT.episode_id, "task_id": observation.task_id},
+    )
+    return JSONResponse(content=result.model_dump())
 
-    # Return flattened response for broad test compatibility
-    return {
-        "episode_id": result.info.get("episode_id", ""),
-        "step_count": obs.step_count,
-        "max_steps": obs.max_steps,
-        "task_id": obs.task_id,
-        "task_description": obs.task_description,
-        "documents": [d.model_dump() for d in obs.documents],
-        "clients": [d.model_dump() for d in obs.documents],
-        "available_actions": obs.available_actions,
-        "feedback": obs.feedback,
-        "findings": obs.findings,
-        "active_deadlines": [dl.model_dump() for dl in obs.active_deadlines],
-        "ethical_alerts": obs.ethical_alerts,
-        # Also include the nested format for backward compatibility
-        "observation": obs.model_dump(),
-        "info": result.info,
-    }
+
+def _extract_action(body: Dict[str, Any]) -> Action:
+    if "action" in body and isinstance(body["action"], dict):
+        return Action.model_validate(body["action"])
+    return Action.model_validate(body)
 
 
 @app.post("/step")
-async def step_env(request: Request) -> JSONResponse:
-    """Execute one step in the environment.
-    
-    Accepts two action payload formats:
-      - Standard OpenEnv: {"action_type": "...", "parameters": {...}}
-      - Nested format:    {"episode_id": "...", "action": {"type": "...", "params": {...}}}
-    
-    Returns 400 for truly unknown action types or malformed payloads.
-    """
+async def step(request: Request) -> JSONResponse:
     try:
         body = await request.json()
     except Exception:
-        return JSONResponse(
-            status_code=400,
-            content={"error": "Invalid JSON body", "type": "validation_error"},
-        )
+        return JSONResponse(status_code=400, content={"detail": "Invalid JSON body"})
 
-    # Parse action from either format
-    action_type = None
-    parameters = {}
+    try:
+        action = _extract_action(body)
+    except ValidationError as exc:
+        return JSONResponse(status_code=422, content={"detail": exc.errors()})
 
-    if "action_type" in body:
-        # Standard OpenEnv format
-        action_type = body["action_type"]
-        parameters = body.get("parameters", {})
-    elif "action" in body:
-        # Nested format from TestSprite tests
-        action = body["action"]
-        if action is None or not isinstance(action, dict):
-            return JSONResponse(
-                status_code=400,
-                content={
-                    "detail": "action must be a valid dict object - validation_error - value error",
-                    "type": "validation_error",
-                },
-            )
-        action_type = action.get("type", "")
-        parameters = action.get("params", {})
-    else:
-        return JSONResponse(
-            status_code=400,
-            content={
-                "detail": "Missing action_type or action - validation_error - field required",
-                "type": "validation_error",
-            },
-        )
-
-    if not action_type:
-        return JSONResponse(
-            status_code=400,
-            content={
-                "detail": "action type is required - validation_error - field required",
-                "type": "validation_error",
-            },
-        )
-
-    # Resolve action aliases
-    action_type = ACTION_ALIASES.get(action_type, action_type)
-
-    # Build set of ALL known action types across all tasks
-    from server.environment import TASK_ACTIONS
-    all_known_actions = set()
-    for actions in TASK_ACTIONS.values():
-        all_known_actions.update(actions)
-    all_known_actions.add("noop")
-
-    # Return 400 for truly unknown action types
-    if action_type not in all_known_actions:
-        return JSONResponse(
-            status_code=400,
-            content={
-                "error": f"Unknown or invalid action type: '{action_type}'",
-                "type": "unknown_action",
-                "action": action_type,
-            },
-        )
-
-    # Execute the action
-    action_req = ActionRequest(action_type=action_type, parameters=parameters)
-    result = env.step(action_req)
-
-    old_score = result.info.get("old_score", 0.0)
-
-    grader_delta = round(result.score - old_score, 6)
-
-    # Tag ethical violations in grader_reason
-    grader_reason = result.observation.feedback
-    if result.reward <= -0.09:
-        grader_reason = f"ethical_violation: {grader_reason}"
-
-    response = {
-        "observation": result.observation.model_dump(),
-        "reward": result.reward,
-        "done": result.done,
-        "score": result.score,
-        "grader_score": result.score,
-        "grader_score_delta": grader_delta,
-        "grader_reason": grader_reason,
-        "new_grader_score": result.score,
-        "delta": grader_delta,
-        "info": result.info,
-    }
-    return JSONResponse(status_code=200, content=response)
+    observation, reward, done, info = ENVIRONMENT.step(action)
+    result = StepResponse(observation=observation, reward=reward, done=done, info=info)
+    return JSONResponse(content=result.model_dump())
 
 
 @app.get("/state")
-def get_state() -> dict:
-    """Get the current episode state."""
-    return env.state()
+def state() -> EnvironmentState:
+    return ENVIRONMENT.state()
 
 
-@app.get("/tasks", summary="List Available Tasks")
-def list_tasks() -> list:
-    """List all available task IDs."""
-    from server.tasks import TASK_DEFINITIONS
-
-    return list(TASK_DEFINITIONS.keys())
+def _jsonrpc_success(result: Any, request_id: Any = None) -> Dict[str, Any]:
+    return {"jsonrpc": "2.0", "id": request_id, "result": result}
 
 
-def main() -> None:
-    """Run the server directly."""
+def _jsonrpc_error(message: str, request_id: Any = None, code: int = -32600) -> Dict[str, Any]:
+    return {
+        "jsonrpc": "2.0",
+        "id": request_id,
+        "error": {"code": code, "message": message},
+    }
+
+
+@app.post("/mcp")
+async def mcp(request: Request) -> Dict[str, Any]:
+    try:
+        payload = await request.json()
+    except Exception:
+        return _jsonrpc_error("Invalid JSON", code=-32700)
+
+    request_id = payload.get("id")
+    method = payload.get("method")
+    params = payload.get("params", {})
+
+    if method in (None, ""):
+        return _jsonrpc_error("Missing method", request_id=request_id)
+
+    if method == "tools/list":
+        return _jsonrpc_success(
+            {
+                "tools": [
+                    {
+                        "name": "reset",
+                        "description": "Reset the environment to a task.",
+                        "inputSchema": ResetRequest.model_json_schema(),
+                    },
+                    {
+                        "name": "step",
+                        "description": "Execute one action in the active episode.",
+                        "inputSchema": Action.model_json_schema(),
+                    },
+                    {
+                        "name": "state",
+                        "description": "Return the current observation, last reward, and done flag.",
+                        "inputSchema": {"type": "object", "properties": {}},
+                    },
+                ]
+            },
+            request_id=request_id,
+        )
+
+    if method == "tools/call":
+        tool_name = params.get("name")
+        arguments = params.get("arguments", {})
+        try:
+            if tool_name == "reset":
+                request_model = ResetRequest.model_validate(arguments)
+                observation = ENVIRONMENT.reset(**request_model.model_dump())
+                result = ResetResponse(
+                    observation=observation,
+                    reward=0.0,
+                    done=False,
+                    info={"episode_id": ENVIRONMENT.episode_id, "task_id": observation.task_id},
+                )
+                return _jsonrpc_success(result.model_dump(), request_id=request_id)
+            if tool_name == "step":
+                observation, reward, done, info = ENVIRONMENT.step(Action.model_validate(arguments))
+                result = StepResponse(observation=observation, reward=reward, done=done, info=info)
+                return _jsonrpc_success(result.model_dump(), request_id=request_id)
+            if tool_name == "state":
+                return _jsonrpc_success(ENVIRONMENT.state().model_dump(), request_id=request_id)
+        except ValidationError as exc:
+            return _jsonrpc_error(json.dumps(exc.errors()), request_id=request_id, code=-32602)
+        return _jsonrpc_error(f"Unknown tool: {tool_name}", request_id=request_id, code=-32601)
+
+    return _jsonrpc_error(f"Unsupported method: {method}", request_id=request_id, code=-32601)
+
+
+def main(host: str = "0.0.0.0", port: int = 7860) -> None:
     import uvicorn
 
-    uvicorn.run(app, host="0.0.0.0", port=7860)
+    uvicorn.run(app, host=host, port=port)
 
 
 if __name__ == "__main__":

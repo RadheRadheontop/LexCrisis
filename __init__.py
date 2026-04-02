@@ -1,7 +1,5 @@
-"""
-Legal Document Analysis — OpenEnv Environment
+"""Top-level package marker for the LexCrisis workspace."""
 
-An environment for training AI agents on real-world legal document analysis tasks.
-"""
+from lexcrisis_env import BENCHMARK_NAME, LexCrisisEnvironment
 
-__version__ = "1.0.0"
+__all__ = ["BENCHMARK_NAME", "LexCrisisEnvironment"]

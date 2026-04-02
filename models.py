@@ -1,19 +1,23 @@
-"""Root-level model re-exports for OpenEnv spec compliance."""
+"""Compatibility re-exports for the LexCrisis package."""
 
-from server.models import (
-    ActionRequest,
-    ObservationResponse,
+from lexcrisis_env.models import (
+    Action,
+    EnvironmentState,
+    MetadataResponse,
+    Observation,
     ResetRequest,
     ResetResponse,
-    StateResponse,
+    Reward,
     StepResponse,
 )
 
 __all__ = [
-    "ActionRequest",
-    "ObservationResponse",
+    "Action",
+    "EnvironmentState",
+    "MetadataResponse",
+    "Observation",
     "ResetRequest",
     "ResetResponse",
-    "StateResponse",
+    "Reward",
     "StepResponse",
 ]

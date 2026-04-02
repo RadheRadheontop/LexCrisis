@@ -1,136 +1,34 @@
-name: LexCrisis Legal Environment
-description: >-
-  Multi-dimensional legal crisis management environment simulating
-  pharmaceutical product liability crisis. Requires simultaneously reasoning
-  about conflict of interest (BCI Rules 22, 33), professional communications
-  privilege (IEA Sec 126, 129), evidence preservation (CPC Order XI),
-  and adversarial multi-front litigation triage — all under real Indian legal rules
-  with cascading consequences and ethical constraints.
-
-type: environment
-version: "2.0.0"
-
-base_url: "http://localhost:7860"
-
-action_schema:
-  type: object
-  required: [action_type]
-  properties:
-    action_type:
-      type: string
-      description: >-
-        One of: review_client, check_conflict, cite_rule, accept_client,
-        decline_client, submit_intake, review_document, classify_privilege,
-        identify_waiver, identify_exception, recommend_action, submit_review,
-        review_event, issue_litigation_hold, file_motion, respond_discovery,
-        assess_expert, flag_adversarial, flag_ethical_issue, submit_triage
-    parameters:
-      type: object
-      description: Action-specific parameters varying by action_type
-      additionalProperties: true
-
-observation_schema:
-  type: object
-  properties:
-    task_id:
-      type: string
-    task_description:
-      type: string
-    documents:
-      type: array
-      items:
-        type: object
-        properties:
-          index:
-            type: integer
-          title:
-            type: string
-          doc_type:
-            type: string
-          category:
-            type: string
-    current_content:
-      type: string
-      nullable: true
-    feedback:
-      type: string
-    available_actions:
-      type: array
-      items:
-        type: string
-    findings:
-      type: object
-      additionalProperties: true
-    step_count:
-      type: integer
-    max_steps:
-      type: integer
-    active_deadlines:
-      type: array
-      items:
-        type: object
-        properties:
-          deadline_id:
-            type: string
-          description:
-            type: string
-          steps_remaining:
-            type: integer
-          consequence:
-            type: string
-    ethical_alerts:
-      type: array
-      items:
-        type: string
-
-tasks:
-  - id: task_1
-    name: Client Conflict Screening
-    difficulty: easy
-    max_steps: 15
-    description: >-
-      Screen 6 potential clients for conflicts of interest under BCI Rules
-      22 and 33 in a pharmaceutical product liability crisis
-      (NovaChem India). Identify conflict pairs, cite applicable rules,
-      and make accept/decline decisions.
-    grader: deterministic
-    score_range: [0.0, 1.0]
-    scoring_breakdown:
-      conflict_pair_identification_f1: 0.40
-      accept_decline_accuracy: 0.35
-      rule_citation_accuracy: 0.25
-
-  - id: task_2
-    name: Privileged Document Review & Classification
-    difficulty: medium
-    max_steps: 25
-    description: >-
-      Review 8 litigation discovery documents and classify privilege status
-      (attorney-client, work product, both, none, waived). Identify
-      crime-fraud exceptions and at-issue waivers. Apply IEA Sections 126
-      and 129 doctrines. Recommend withhold, produce, clawback, or redact.
-    grader: deterministic
-    score_range: [0.0, 1.0]
-    scoring_breakdown:
-      classification_accuracy: 0.45
-      waiver_identification_f1: 0.30
-      doctrine_citation_quality: 0.25
-
-  - id: task_3
-    name: Multi-Front Crisis Triage
-    difficulty: hard
-    max_steps: 40
-    description: >-
-      Manage 5 simultaneous crisis events with cascading deadlines,
-      adversarial discovery traps, and ethical dilemmas. Issue litigation
-      holds (CPC Order XI), file court motions, respond to adversarial
-      discovery without waiving privilege, detect ethical traps involving
-      former client conflicts (BCI Rule 33), and assess expert witnesses
-      under IEA Section 45. Contains 2 adversarial elements and 1 ethical trap.
-    grader: deterministic
-    score_range: [0.0, 1.0]
-    scoring_breakdown:
-      deadline_compliance: 0.25
-      ethical_compliance: 0.25
-      adversarial_detection: 0.25
-      action_sequence_quality: 0.25
+spec_version: 1
+name: lexcrisis
+type: space
+runtime: fastapi
+app: server.app:app
+port: 7860
+version: "1.0.0"
+description: >
+  LexCrisis is an OpenEnv benchmark for legal operations incident response during
+  high-stakes pharmaceutical product-liability litigation. It evaluates conflict
+  screening, privilege review, and multi-front litigation triage under deadline,
+  ethics, and privilege-waiver constraints.
+metadata:
+  benchmark: lexcrisis
+  domain: legal-operations
+  tags:
+    - openenv
+    - law
+    - litigation
+    - legal-ops
+    - product-liability
+  tasks:
+    - id: task_1
+      name: Conflict-Safe Client Intake
+      difficulty: easy
+      max_steps: 16
+    - id: task_2
+      name: Privilege Review Under Litigation Pressure
+      difficulty: medium
+      max_steps: 24
+    - id: task_3
+      name: Litigation Incident Command
+      difficulty: hard
+      max_steps: 20
