@@ -33,7 +33,6 @@ output.txt
 
 # Dev files
 testsprite_tests/
-uv.lock
 *.egg-info/
 
 # Outputs
