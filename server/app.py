@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
-from fastapi import FastAPI, Request
+from fastapi import Body, FastAPI, Request
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import ValidationError
 
@@ -102,7 +102,17 @@ def episode() -> Dict[str, Any]:
 
 
 @app.post("/reset")
-def reset(payload: ResetRequest) -> JSONResponse:
+async def reset(request: Request) -> JSONResponse:
+    """Reset endpoint — accepts empty body, JSON body, or null body."""
+    payload = ResetRequest()
+    try:
+        body = await request.body()
+        if body:
+            data = await request.json()
+            if data:
+                payload = ResetRequest.model_validate(data)
+    except Exception:
+        pass  # empty or malformed body → use all defaults
     observation = ENVIRONMENT.reset(
         task_id=payload.task_id,
         seed=payload.seed,
