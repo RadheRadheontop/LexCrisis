@@ -10,7 +10,7 @@ from uuid import uuid4
 from openenv.core.env_server import Environment
 from openenv.core.env_server.types import EnvironmentMetadata
 
-from lexcrisis_env.graders import GROUND_TRUTH, GRADERS
+from lexcrisis_env.graders import GROUND_TRUTH, GRADERS, _SCORE_FLOOR, _SCORE_CEIL, _clamp_score
 from lexcrisis_env.models import (
     Action,
     DeadlineSummary,
@@ -167,7 +167,7 @@ class LexCrisisEngine:
 
     @property
     def last_score(self) -> float:
-        return self._score
+        return round(max(_SCORE_FLOOR, min(self._score, _SCORE_CEIL)), 4)
 
     @property
     def episode_id(self) -> str:
@@ -223,7 +223,7 @@ class LexCrisisEngine:
         try:
             return grader(copy.deepcopy(self._findings), truth)
         except Exception:
-            return 0.0
+            return _SCORE_FLOOR
 
     def _build_observation(self) -> Observation:
         definition = TASK_DEFINITIONS[self._task_id]

@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 """Baseline inference agent for LexCrisis OpenEnv benchmark.
 
-Routes **ALL** LLM calls through the evaluator-provided LiteLLM proxy.
-No fallback to other APIs, no hardcoded credentials, no bypass paths.
+Routes ALL LLM calls through the evaluator-provided LiteLLM proxy.
+No hardcoded API keys or bypass paths.
 
 Environment variables (injected by the hackathon evaluator)
 -----------------------------------------------------------
-API_BASE_URL  – LiteLLM proxy base URL  (REQUIRED)
-API_KEY       – LiteLLM proxy API key   (REQUIRED)
-MODEL_NAME    – model to request        (default: Qwen/Qwen2.5-72B-Instruct)
+API_BASE_URL  – LiteLLM proxy base URL  (has default)
+MODEL_NAME    – model to request        (has default)
+HF_TOKEN      – HuggingFace / proxy key (NO default, injected by evaluator)
 """
 
 from __future__ import annotations
@@ -34,41 +34,43 @@ from lexcrisis_env.tasks import SCRIPTED_BASELINES, TASK_ACTIONS, TASK_DEFINITIO
 # ──────────────────────────────────────────────────────────────────────
 
 def _log(msg: str) -> None:
-    """Write a diagnostic line to stderr (never mixed with step output)."""
+    """Write a diagnostic line to stderr (never mixed with stdout output)."""
     sys.stderr.write(f"# {msg}\n")
     sys.stderr.flush()
 
 
 # ──────────────────────────────────────────────────────────────────────
-# Configuration – read EXACTLY from the env vars the evaluator injects
+# Configuration – EXACTLY as the pre-submission checklist requires:
+#   API_BASE_URL  →  os.getenv("API_BASE_URL", "<default>")
+#   MODEL_NAME    →  os.getenv("MODEL_NAME",   "<default>")
+#   HF_TOKEN      →  os.getenv("HF_TOKEN")          ← NO default
 # ──────────────────────────────────────────────────────────────────────
 
-API_BASE_URL: str = os.environ.get("API_BASE_URL", "").strip().rstrip("/")
-API_KEY: str = os.environ.get("API_KEY", "").strip()
-MODEL_NAME: str = os.environ.get("MODEL_NAME", "Qwen/Qwen2.5-72B-Instruct").strip()
+API_BASE_URL = os.getenv("API_BASE_URL", "https://router.huggingface.co/v1")
+MODEL_NAME = os.getenv("MODEL_NAME", "Qwen/Qwen2.5-72B-Instruct")
+HF_TOKEN = os.getenv("HF_TOKEN") or os.getenv("API_KEY", "")
 
-if not API_BASE_URL:
-    _log("FATAL: API_BASE_URL environment variable is not set or empty.")
-    _log("       The evaluator must inject this. Exiting.")
-    sys.exit(1)
-
-if not API_KEY:
-    _log("FATAL: API_KEY environment variable is not set or empty.")
-    _log("       The evaluator must inject this. Exiting.")
-    sys.exit(1)
+# Strip whitespace / trailing slashes
+API_BASE_URL = API_BASE_URL.strip().rstrip("/")
+MODEL_NAME = MODEL_NAME.strip()
+HF_TOKEN = HF_TOKEN.strip()
 
 _log(f"API_BASE_URL = {API_BASE_URL}")
-_log(f"API_KEY      = {API_KEY[:4]}{'*' * max(0, len(API_KEY) - 4)}")
 _log(f"MODEL_NAME   = {MODEL_NAME}")
+_log(f"HF_TOKEN     = {'set (' + HF_TOKEN[:4] + '...)' if HF_TOKEN else 'NOT SET'}")
+
+if not HF_TOKEN:
+    _log("WARNING: HF_TOKEN is not set. LLM calls will likely fail.")
+    _log("         The evaluator should inject HF_TOKEN at runtime.")
 
 
 # ──────────────────────────────────────────────────────────────────────
-# OpenAI client – always pointing at the evaluator proxy
+# OpenAI client – configured via the evaluator-injected variables
 # ──────────────────────────────────────────────────────────────────────
 
-CLIENT: OpenAI = OpenAI(
+client = OpenAI(
     base_url=API_BASE_URL,
-    api_key=API_KEY,
+    api_key=HF_TOKEN,
     timeout=120.0,
     max_retries=3,
 )
@@ -87,7 +89,7 @@ _api_successes: int = 0
 
 
 # ──────────────────────────────────────────────────────────────────────
-# Raw HTTP helper – bypasses OpenAI SDK entirely as a fallback
+# Raw HTTP helper – fallback if the OpenAI SDK has issues
 # ──────────────────────────────────────────────────────────────────────
 
 def _raw_chat_completion(
@@ -99,12 +101,12 @@ def _raw_chat_completion(
     global _api_attempts, _api_successes
     _api_attempts += 1
     url = f"{API_BASE_URL}/chat/completions"
-    _log(f"  [{label}] raw POST → {url}")
+    _log(f"  [{label}] raw POST -> {url}")
     try:
         resp = http_requests.post(
             url,
             headers={
-                "Authorization": f"Bearer {API_KEY}",
+                "Authorization": f"Bearer {HF_TOKEN}",
                 "Content-Type": "application/json",
             },
             json={
@@ -137,9 +139,9 @@ def _raw_chat_completion(
 # ──────────────────────────────────────────────────────────────────────
 
 def _verify_proxy() -> None:
-    """Hit the proxy at startup to register the key, before any tasks run."""
+    """Hit the proxy at startup to register the key before any tasks run."""
     global _api_attempts, _api_successes
-    _log("─── Proxy connectivity test ───")
+    _log("--- Proxy connectivity test ---")
 
     # 1) GET /models – cheap reachability check
     try:
@@ -147,20 +149,20 @@ def _verify_proxy() -> None:
         _log(f"  GET {models_url}")
         r = http_requests.get(
             models_url,
-            headers={"Authorization": f"Bearer {API_KEY}"},
+            headers={"Authorization": f"Bearer {HF_TOKEN}"},
             timeout=15,
         )
-        _log(f"  GET /models → HTTP {r.status_code}")
+        _log(f"  GET /models -> HTTP {r.status_code}")
         if r.ok:
-            _log(f"  models response (truncated): {r.text[:200]}")
+            _log(f"  models (truncated): {r.text[:200]}")
     except Exception as exc:
         _log(f"  GET /models error: {exc}")
 
-    # 2) SDK chat completion – the proper way to register key activity
+    # 2) SDK chat completion – registers the key via the OpenAI client
     _api_attempts += 1
     try:
-        _log(f"  SDK warmup call (model={MODEL_NAME})")
-        resp = CLIENT.chat.completions.create(
+        _log(f"  SDK warmup (model={MODEL_NAME}, base_url={API_BASE_URL})")
+        resp = client.chat.completions.create(
             model=MODEL_NAME,
             messages=[{"role": "user", "content": "Reply with the single word OK."}],
             max_tokens=4,
@@ -173,8 +175,8 @@ def _verify_proxy() -> None:
         _log(f"  SDK warmup failed: {exc}")
         _log(f"  traceback:\n{traceback.format_exc()}")
 
-        # 3) Raw HTTP fallback – ensures the key gets hit even if SDK has issues
-        _log("  Trying raw HTTP fallback ...")
+        # 3) Raw HTTP fallback – ensures the key gets hit no matter what
+        _log("  Trying raw HTTP fallback...")
         result = _raw_chat_completion(
             [{"role": "user", "content": "Reply OK"}],
             label="warmup-fallback",
@@ -185,15 +187,15 @@ def _verify_proxy() -> None:
         else:
             _log("  Raw fallback also failed. Proxy may be unreachable.")
 
-    _log("─── End connectivity test ───")
+    _log("--- End connectivity test ---")
 
 
-# Run the test immediately at import time
+# Run the connectivity test at import time
 _verify_proxy()
 
 
 # ──────────────────────────────────────────────────────────────────────
-# Output format helpers (spec-required log lines)
+# Output format helpers – exact [START]/[STEP]/[END] format
 # ──────────────────────────────────────────────────────────────────────
 
 def action_string(action: Dict[str, Any]) -> str:
@@ -283,7 +285,7 @@ def get_llm_action(
     _api_attempts += 1
     try:
         _log(f"Step {step_index}: SDK call (model={MODEL_NAME})")
-        response = CLIENT.chat.completions.create(
+        response = client.chat.completions.create(
             model=MODEL_NAME,
             temperature=0,
             max_tokens=256,
@@ -372,6 +374,9 @@ def run_task(task_id: str) -> Dict[str, Any]:
         env.close()
         emit_end(success, step_index, rewards)
 
+    # Phase-2 requirement: score must be strictly in (0, 1)
+    final_score = max(0.001, min(final_score, 0.999))
+
     return {
         "task_id": task_id,
         "task_name": TASK_DEFINITIONS[task_id].name,
@@ -390,7 +395,7 @@ def main() -> None:
     _log(f"Starting LexCrisis inference agent")
     _log(f"  base_url: {API_BASE_URL}")
     _log(f"  model:    {MODEL_NAME}")
-    _log(f"  key set:  {bool(API_KEY)}")
+    _log(f"  token:    {'set' if HF_TOKEN else 'NOT SET'}")
 
     results = [run_task(task_id) for task_id in TASK_DEFINITIONS]
 
@@ -404,7 +409,6 @@ def main() -> None:
     _log(f"Run complete. API attempts={_api_attempts}, successes={_api_successes}")
     if _api_successes == 0:
         _log("WARNING: ZERO successful API calls. The proxy key was likely never activated.")
-        _log("         Check API_BASE_URL and API_KEY values above.")
 
 
 if __name__ == "__main__":

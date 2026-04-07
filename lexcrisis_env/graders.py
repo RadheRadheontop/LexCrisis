@@ -14,6 +14,16 @@ from lexcrisis_env.tasks import (
 )
 
 
+# Phase-2 requires every task score to be strictly inside (0, 1).
+_SCORE_FLOOR = 0.001
+_SCORE_CEIL  = 0.999
+
+
+def _clamp_score(raw: float) -> float:
+    """Clamp a grader score to the open interval (0, 1)."""
+    return round(max(_SCORE_FLOOR, min(raw, _SCORE_CEIL)), 4)
+
+
 def _safe_divide(numerator: float, denominator: float) -> float:
     return numerator / denominator if denominator else 0.0
 
@@ -77,7 +87,7 @@ def grade_task_1(findings: Dict[str, Any], ground_truth: Dict[str, Any]) -> floa
     rule_accuracy = _safe_divide(correct_rules, len(actual_rules))
 
     score = (0.45 * pair_f1) + (0.35 * decision_accuracy) + (0.20 * min(rule_accuracy, 1.0))
-    return round(max(0.0, min(score, 1.0)), 4)
+    return _clamp_score(score)
 
 
 def grade_task_2(findings: Dict[str, Any], ground_truth: Dict[str, Any]) -> float:
@@ -152,7 +162,7 @@ def grade_task_2(findings: Dict[str, Any], ground_truth: Dict[str, Any]) -> floa
         + (0.10 * exception_accuracy)
         + (0.15 * recommendation_accuracy)
     )
-    return round(max(0.0, min(score, 1.0)), 4)
+    return _clamp_score(score)
 
 
 def grade_task_3(findings: Dict[str, Any], ground_truth: Dict[str, Any]) -> float:
@@ -231,7 +241,7 @@ def grade_task_3(findings: Dict[str, Any], ground_truth: Dict[str, Any]) -> floa
         + (0.10 * expert_score)
         + (0.10 * ordering_score)
     )
-    return round(max(0.0, min(score, 1.0)), 4)
+    return _clamp_score(score)
 
 
 GRADERS = {
