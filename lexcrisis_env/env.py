@@ -48,7 +48,7 @@ class LexCrisisEngine:
         self._episode_id = str(uuid4())
         self._task_id = "task_1"
         self._step_count = 0
-        self._score = 0.0
+        self._score = _SCORE_FLOOR
         self._done = False
         self._last_reward = 0.0
         self._last_reward_model = Reward(
@@ -83,7 +83,7 @@ class LexCrisisEngine:
         self._task_id = selected_task
         self._episode_id = episode_id or str(uuid4())
         self._step_count = 0
-        self._score = 0.0
+        self._score = _SCORE_FLOOR
         self._done = False
         self._last_reward = 0.0
         self._cumulative_reward = 0.0
@@ -128,7 +128,7 @@ class LexCrisisEngine:
         reward_value = round(score_delta + milestone_bonus + penalty, 4)
         self._last_reward = reward_value
         self._cumulative_reward = round(self._cumulative_reward + reward_value, 4)
-        self._score = round(new_score, 4)
+        self._score = round(max(_SCORE_FLOOR, min(new_score, _SCORE_CEIL)), 4)
 
         terminal_action = TERMINAL_ACTIONS[self._task_id]
         if action.action_type == terminal_action:
@@ -300,7 +300,7 @@ class LexCrisisEngine:
             "episode_id": self._episode_id,
             "task_id": self._task_id,
             "step_count": self._step_count,
-            "score": self._score,
+            "score": round(max(_SCORE_FLOOR, min(self._score, _SCORE_CEIL)), 4),
             "cumulative_reward": self._cumulative_reward,
             "reward_breakdown": self._last_reward_model.model_dump(),
         }
