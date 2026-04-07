@@ -163,48 +163,37 @@ docker run -p 7860:7860 lexcrisis
 
 ## Inference
 
-`inference.py` is a deterministic reference runner that executes all three tasks and
-emits structured logs in the required format.
+`inference.py` is the baseline agent runner. It executes all three tasks, queries the
+LLM via the provided proxy at every step, and emits structured logs in the required
+format.
 
-Environment variables:
+**All LLM calls go through the evaluator-provided LiteLLM proxy.** The script reads
+`API_BASE_URL` and `API_KEY` from environment variables and will exit immediately if
+either is missing.
 
-- `API_BASE_URL` default: `https://router.huggingface.co/v1`
-- `MODEL_NAME` default: `Qwen/Qwen2.5-72B-Instruct`
-- `API_KEY` (required for LLM mode)
+Environment variables (injected by the evaluator):
 
-Optional:
-
-- `USE_LLM_BASELINE=true`
-  This enables optional LLM-assisted annotations through the OpenAI client.
-  The default baseline is scripted and deterministic for reproducibility.
+- `API_BASE_URL` – LiteLLM proxy base URL (**required**, no default)
+- `API_KEY` – LiteLLM proxy API key (**required**, no default)
+- `MODEL_NAME` – model to request (default: `Qwen/Qwen2.5-72B-Instruct`)
 
 Run:
 
 ```bash
-python inference.py
-```
-
-### API Keys And GitHub Safety
-
-You do **not** need an API key for the default deterministic baseline.
-
-You only need a key if you enable optional LLM-assisted mode:
-
-```bash
-export API_KEY=your_token_here
-export USE_LLM_BASELINE=true
+export API_BASE_URL=https://your-proxy-url/v1
+export API_KEY=your_key_here
 python inference.py
 ```
 
 Windows PowerShell:
 
 ```powershell
-$env:API_KEY="your_token_here"
-$env:USE_LLM_BASELINE="true"
+$env:API_BASE_URL="https://your-proxy-url/v1"
+$env:API_KEY="your_key_here"
 python inference.py
 ```
 
-Do not hardcode secrets in the repo.
+### API Keys And GitHub Safety
 
 - Put keys in environment variables locally.
 - Put them in Hugging Face Space secrets when deploying.

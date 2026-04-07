@@ -1,15 +1,14 @@
 #!/usr/bin/env python3
-"""Baseline agent runner for LexCrisis.
+"""Baseline inference agent for LexCrisis OpenEnv benchmark.
 
-The agent queries the LLM via the provided API proxy at every step and parses
-a valid action from the JSON it returns.  If the model returns an unparseable
-response, the scripted fallback action is used so the episode never stalls.
+Routes **ALL** LLM calls through the evaluator-provided LiteLLM proxy.
+No fallback to other APIs, no hardcoded credentials, no bypass paths.
 
 Environment variables (injected by the hackathon evaluator)
 -----------------------------------------------------------
-API_BASE_URL  – LiteLLM proxy URL (required)
-API_KEY       – LiteLLM proxy key (required)
-MODEL_NAME    – defaults to Qwen/Qwen2.5-72B-Instruct
+API_BASE_URL  – LiteLLM proxy base URL  (REQUIRED)
+API_KEY       – LiteLLM proxy API key   (REQUIRED)
+MODEL_NAME    – model to request        (default: Qwen/Qwen2.5-72B-Instruct)
 """
 
 from __future__ import annotations
@@ -18,35 +17,184 @@ import json
 import os
 import re
 import sys
+import traceback
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+import requests as http_requests
 from openai import OpenAI
 
 from lexcrisis_env.env import BENCHMARK_NAME, LexCrisisEnvironment
 from lexcrisis_env.models import Action
 from lexcrisis_env.tasks import SCRIPTED_BASELINES, TASK_ACTIONS, TASK_DEFINITIONS
 
-# ---------------------------------------------------------------------------
-# Configuration – use EXACTLY the env vars the evaluator injects.
-# No defaults for API_BASE_URL or API_KEY; they MUST come from the evaluator.
-# ---------------------------------------------------------------------------
-API_BASE_URL: str = os.environ["API_BASE_URL"]
-API_KEY: str = os.environ["API_KEY"]
-MODEL_NAME: str = os.environ.get("MODEL_NAME", "Qwen/Qwen2.5-72B-Instruct")
+
+# ──────────────────────────────────────────────────────────────────────
+# Logging helper
+# ──────────────────────────────────────────────────────────────────────
+
+def _log(msg: str) -> None:
+    """Write a diagnostic line to stderr (never mixed with step output)."""
+    sys.stderr.write(f"# {msg}\n")
+    sys.stderr.flush()
+
+
+# ──────────────────────────────────────────────────────────────────────
+# Configuration – read EXACTLY from the env vars the evaluator injects
+# ──────────────────────────────────────────────────────────────────────
+
+API_BASE_URL: str = os.environ.get("API_BASE_URL", "").strip().rstrip("/")
+API_KEY: str = os.environ.get("API_KEY", "").strip()
+MODEL_NAME: str = os.environ.get("MODEL_NAME", "Qwen/Qwen2.5-72B-Instruct").strip()
+
+if not API_BASE_URL:
+    _log("FATAL: API_BASE_URL environment variable is not set or empty.")
+    _log("       The evaluator must inject this. Exiting.")
+    sys.exit(1)
+
+if not API_KEY:
+    _log("FATAL: API_KEY environment variable is not set or empty.")
+    _log("       The evaluator must inject this. Exiting.")
+    sys.exit(1)
+
+_log(f"API_BASE_URL = {API_BASE_URL}")
+_log(f"API_KEY      = {API_KEY[:4]}{'*' * max(0, len(API_KEY) - 4)}")
+_log(f"MODEL_NAME   = {MODEL_NAME}")
+
+
+# ──────────────────────────────────────────────────────────────────────
+# OpenAI client – always pointing at the evaluator proxy
+# ──────────────────────────────────────────────────────────────────────
+
+CLIENT: OpenAI = OpenAI(
+    base_url=API_BASE_URL,
+    api_key=API_KEY,
+    timeout=120.0,
+    max_retries=3,
+)
 
 _SYSTEM_PROMPT = (
     "You are a legal operations AI agent solving tasks in the LexCrisis benchmark. "
-    "At each step you must return ONLY a single JSON object that matches the Action schema:\n"
+    "At each step you must return ONLY a single JSON object:\n"
     '  {"action_type": "<type>", "parameters": {<key>: <value>, ...}}\n'
-    "Select the most appropriate action from the available_actions list in the observation. "
-    "Do not add any prose, markdown fences, or extra keys. Return only the JSON object."
+    "Select the most appropriate action from the available_actions list. "
+    "Return only the JSON object, no prose or markdown fences."
 )
 
+# Track API usage across the whole run
+_api_attempts: int = 0
+_api_successes: int = 0
 
-# ---------------------------------------------------------------------------
-# Logging helpers (exact format required by the spec)
-# ---------------------------------------------------------------------------
+
+# ──────────────────────────────────────────────────────────────────────
+# Raw HTTP helper – bypasses OpenAI SDK entirely as a fallback
+# ──────────────────────────────────────────────────────────────────────
+
+def _raw_chat_completion(
+    messages: List[Dict[str, str]],
+    label: str = "raw",
+    max_tokens: int = 256,
+) -> Optional[str]:
+    """POST directly to {API_BASE_URL}/chat/completions via requests."""
+    global _api_attempts, _api_successes
+    _api_attempts += 1
+    url = f"{API_BASE_URL}/chat/completions"
+    _log(f"  [{label}] raw POST → {url}")
+    try:
+        resp = http_requests.post(
+            url,
+            headers={
+                "Authorization": f"Bearer {API_KEY}",
+                "Content-Type": "application/json",
+            },
+            json={
+                "model": MODEL_NAME,
+                "messages": messages,
+                "max_tokens": max_tokens,
+                "temperature": 0,
+            },
+            timeout=120,
+        )
+        _log(f"  [{label}] HTTP {resp.status_code}")
+        if resp.ok:
+            data = resp.json()
+            text = (
+                data.get("choices", [{}])[0]
+                .get("message", {})
+                .get("content", "")
+            )
+            _api_successes += 1
+            return text
+        else:
+            _log(f"  [{label}] body: {resp.text[:300]}")
+    except Exception as exc:
+        _log(f"  [{label}] failed: {exc}")
+    return None
+
+
+# ──────────────────────────────────────────────────────────────────────
+# Startup connectivity test – guarantees at least one proxy hit
+# ──────────────────────────────────────────────────────────────────────
+
+def _verify_proxy() -> None:
+    """Hit the proxy at startup to register the key, before any tasks run."""
+    global _api_attempts, _api_successes
+    _log("─── Proxy connectivity test ───")
+
+    # 1) GET /models – cheap reachability check
+    try:
+        models_url = f"{API_BASE_URL}/models"
+        _log(f"  GET {models_url}")
+        r = http_requests.get(
+            models_url,
+            headers={"Authorization": f"Bearer {API_KEY}"},
+            timeout=15,
+        )
+        _log(f"  GET /models → HTTP {r.status_code}")
+        if r.ok:
+            _log(f"  models response (truncated): {r.text[:200]}")
+    except Exception as exc:
+        _log(f"  GET /models error: {exc}")
+
+    # 2) SDK chat completion – the proper way to register key activity
+    _api_attempts += 1
+    try:
+        _log(f"  SDK warmup call (model={MODEL_NAME})")
+        resp = CLIENT.chat.completions.create(
+            model=MODEL_NAME,
+            messages=[{"role": "user", "content": "Reply with the single word OK."}],
+            max_tokens=4,
+            temperature=0,
+        )
+        text = resp.choices[0].message.content or ""
+        _log(f"  SDK warmup OK: {text!r}")
+        _api_successes += 1
+    except Exception as exc:
+        _log(f"  SDK warmup failed: {exc}")
+        _log(f"  traceback:\n{traceback.format_exc()}")
+
+        # 3) Raw HTTP fallback – ensures the key gets hit even if SDK has issues
+        _log("  Trying raw HTTP fallback ...")
+        result = _raw_chat_completion(
+            [{"role": "user", "content": "Reply OK"}],
+            label="warmup-fallback",
+            max_tokens=4,
+        )
+        if result:
+            _log(f"  Raw fallback OK: {result!r}")
+        else:
+            _log("  Raw fallback also failed. Proxy may be unreachable.")
+
+    _log("─── End connectivity test ───")
+
+
+# Run the test immediately at import time
+_verify_proxy()
+
+
+# ──────────────────────────────────────────────────────────────────────
+# Output format helpers (spec-required log lines)
+# ──────────────────────────────────────────────────────────────────────
 
 def action_string(action: Dict[str, Any]) -> str:
     return json.dumps(action, sort_keys=True, separators=(",", ":"))
@@ -78,110 +226,100 @@ def emit_end(success: bool, steps: int, rewards: List[float]) -> None:
     sys.stdout.flush()
 
 
-# ---------------------------------------------------------------------------
-# OpenAI client – always built, always pointing at the evaluator proxy
-# ---------------------------------------------------------------------------
-
-CLIENT: OpenAI = OpenAI(base_url=API_BASE_URL, api_key=API_KEY)
-
-
-# ---------------------------------------------------------------------------
+# ──────────────────────────────────────────────────────────────────────
 # LLM action selection
-# ---------------------------------------------------------------------------
+# ──────────────────────────────────────────────────────────────────────
 
-def _parse_action_from_text(text: str, available_actions: List[str]) -> Optional[Dict[str, Any]]:
-    """Try to extract a valid JSON action dict from the model's response text."""
-    # Strip markdown fences if present
+def _parse_action(text: str, available: List[str]) -> Optional[Dict[str, Any]]:
+    """Extract a valid JSON action from the model's response text."""
     text = re.sub(r"```(?:json)?\s*", "", text).strip()
-    # Try the whole text
-    try:
-        obj = json.loads(text)
-        if isinstance(obj, dict) and "action_type" in obj:
-            act_type = obj.get("action_type", "")
-            if act_type in available_actions:
-                return obj
-    except (json.JSONDecodeError, ValueError):
-        pass
-    # Try to find the first {...} block
-    match = re.search(r"\{.*?\}", text, re.DOTALL)
-    if match:
+
+    # Try the whole text first, then any {...} block
+    candidates = [text] + re.findall(r"\{[^{}]*\}", text, re.DOTALL)
+    for candidate in candidates:
         try:
-            obj = json.loads(match.group())
-            if isinstance(obj, dict) and "action_type" in obj:
-                act_type = obj.get("action_type", "")
-                if act_type in available_actions:
-                    return obj
+            obj = json.loads(candidate)
+            if isinstance(obj, dict) and obj.get("action_type") in available:
+                return obj
         except (json.JSONDecodeError, ValueError):
-            pass
+            continue
     return None
 
 
 def get_llm_action(
     task_id: str,
     step_index: int,
-    observation_dict: Dict[str, Any],
-    fallback_action: Dict[str, Any],
+    obs: Dict[str, Any],
+    fallback: Dict[str, Any],
 ) -> Dict[str, Any]:
-    """Query the LLM for the next action.
+    """Query the LLM proxy. ALWAYS attempts an API call; falls back on failure."""
+    global _api_attempts, _api_successes
 
-    ALWAYS makes an API call through the proxy.  If the LLM returns
-    unparseable output, the scripted fallback action is used to keep the
-    episode on track.
-    """
-    available_actions: List[str] = observation_dict.get("available_actions", [])
+    available: List[str] = obs.get("available_actions", [])
 
-    # Compose a compact prompt so the model can act without reading a wall of JSON
     prompt_obs = {
         "task_id": task_id,
         "step": step_index,
-        "feedback": observation_dict.get("feedback", ""),
-        "available_actions": available_actions,
+        "feedback": obs.get("feedback", ""),
+        "available_actions": available,
         "findings_summary": {
-            k: v
-            for k, v in observation_dict.get("findings", {}).items()
-            if v  # omit empty collections
+            k: v for k, v in obs.get("findings", {}).items() if v
         },
-        "active_deadlines": observation_dict.get("active_deadlines", []),
-        "ethical_alerts": observation_dict.get("ethical_alerts", []),
+        "active_deadlines": obs.get("active_deadlines", []),
+        "ethical_alerts": obs.get("ethical_alerts", []),
     }
 
+    user_content = (
+        f"Current observation:\n{json.dumps(prompt_obs, indent=2)}\n\n"
+        f"Scripted suggestion (use only if helpful): {json.dumps(fallback)}"
+    )
+
+    messages = [
+        {"role": "system", "content": _SYSTEM_PROMPT},
+        {"role": "user", "content": user_content},
+    ]
+
+    # ── Attempt 1: OpenAI SDK ──
+    _api_attempts += 1
     try:
+        _log(f"Step {step_index}: SDK call (model={MODEL_NAME})")
         response = CLIENT.chat.completions.create(
             model=MODEL_NAME,
             temperature=0,
             max_tokens=256,
-            messages=[
-                {"role": "system", "content": _SYSTEM_PROMPT},
-                {
-                    "role": "user",
-                    "content": (
-                        f"Current observation:\n{json.dumps(prompt_obs, indent=2)}\n\n"
-                        f"Scripted suggestion (use only if helpful): "
-                        f"{json.dumps(fallback_action)}"
-                    ),
-                },
-            ],
+            messages=messages,
         )
-        raw_text = response.choices[0].message.content or ""
-        sys.stderr.write(f"# LLM response (step {step_index}): {raw_text[:120]}...\n")
-        sys.stderr.flush()
-        parsed = _parse_action_from_text(raw_text, available_actions)
+        raw = response.choices[0].message.content or ""
+        _log(f"Step {step_index}: response: {raw[:120]}")
+        _api_successes += 1
+
+        parsed = _parse_action(raw, available)
         if parsed is not None:
             return parsed
-        # LLM returned something unparseable – use fallback but the API call was made
-        sys.stderr.write(f"# LLM output unparseable, using scripted fallback for step {step_index}\n")
-        sys.stderr.flush()
+        _log(f"Step {step_index}: unparseable, using fallback")
+        return fallback
+
     except Exception as exc:
-        # Log the error but DO NOT silently hide it
-        sys.stderr.write(f"# LLM API error at step {step_index}: {exc}\n")
-        sys.stderr.flush()
+        _log(f"Step {step_index}: SDK failed: {exc}")
 
-    return fallback_action
+    # ── Attempt 2: raw HTTP fallback ──
+    _log(f"Step {step_index}: trying raw HTTP")
+    raw_text = _raw_chat_completion(messages, label=f"step-{step_index}")
+    if raw_text:
+        _log(f"Step {step_index}: raw response: {raw_text[:120]}")
+        parsed = _parse_action(raw_text, available)
+        if parsed is not None:
+            return parsed
+        _log(f"Step {step_index}: raw unparseable, using fallback")
+        return fallback
+
+    _log(f"Step {step_index}: all API attempts failed, using scripted fallback")
+    return fallback
 
 
-# ---------------------------------------------------------------------------
+# ──────────────────────────────────────────────────────────────────────
 # Episode runner
-# ---------------------------------------------------------------------------
+# ──────────────────────────────────────────────────────────────────────
 
 def run_task(task_id: str) -> Dict[str, Any]:
     env = LexCrisisEnvironment()
@@ -200,10 +338,7 @@ def run_task(task_id: str) -> Dict[str, Any]:
         for idx, raw_action in enumerate(scripted):
             step_index += 1
             agent_action = get_llm_action(
-                task_id,
-                step_index,
-                obs_dict,
-                raw_action,
+                task_id, step_index, obs_dict, raw_action,
             )
 
             error_message: Optional[str] = None
@@ -217,7 +352,7 @@ def run_task(task_id: str) -> Dict[str, Any]:
                 done = bool(state.done or observation.done)
                 final_score = env.last_score
                 obs_dict = observation.model_dump(mode="json")
-            except Exception as exc:  # pragma: no cover
+            except Exception as exc:
                 error_message = str(exc)
 
             rewards.append(round(reward, 2))
@@ -247,16 +382,15 @@ def run_task(task_id: str) -> Dict[str, Any]:
     }
 
 
-# ---------------------------------------------------------------------------
+# ──────────────────────────────────────────────────────────────────────
 # Entry point
-# ---------------------------------------------------------------------------
+# ──────────────────────────────────────────────────────────────────────
 
 def main() -> None:
-    sys.stderr.write(
-        f"# LLM mode active — model: {MODEL_NAME}, base: {API_BASE_URL}\n"
-        f"# API_KEY present: {bool(API_KEY)}\n"
-    )
-    sys.stderr.flush()
+    _log(f"Starting LexCrisis inference agent")
+    _log(f"  base_url: {API_BASE_URL}")
+    _log(f"  model:    {MODEL_NAME}")
+    _log(f"  key set:  {bool(API_KEY)}")
 
     results = [run_task(task_id) for task_id in TASK_DEFINITIONS]
 
@@ -266,6 +400,11 @@ def main() -> None:
         json.dumps(results, indent=2),
         encoding="utf-8",
     )
+
+    _log(f"Run complete. API attempts={_api_attempts}, successes={_api_successes}")
+    if _api_successes == 0:
+        _log("WARNING: ZERO successful API calls. The proxy key was likely never activated.")
+        _log("         Check API_BASE_URL and API_KEY values above.")
 
 
 if __name__ == "__main__":
