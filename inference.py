@@ -1,23 +1,15 @@
 #!/usr/bin/env python3
 """Baseline agent runner for LexCrisis.
 
-Execution modes
----------------
-- **LLM mode** (default when HF_TOKEN or API_KEY is set and USE_LLM_BASELINE=1):
-  The agent queries the model at every step and parses a valid action from the
-  JSON it returns.  If the model returns an unparseable response the scripted
-  fallback action is used so the episode never stalls.
-- **Scripted mode** (default when no API key is present):
-  Deterministic reference policy that replays SCRIPTED_BASELINES.  Produces
-  identical scores on every run.
+The agent queries the LLM via the provided API proxy at every step and parses
+a valid action from the JSON it returns.  If the model returns an unparseable
+response, the scripted fallback action is used so the episode never stalls.
 
-Environment variables
----------------------
-API_BASE_URL     – defaults to https://router.huggingface.co/v1
-MODEL_NAME       – defaults to Qwen/Qwen2.5-72B-Instruct
-HF_TOKEN         – preferred credential (checked first)
-API_KEY          – fallback credential
-USE_LLM_BASELINE – set to 1/true/yes to activate LLM mode
+Environment variables (injected by the hackathon evaluator)
+-----------------------------------------------------------
+API_BASE_URL  – LiteLLM proxy URL (required)
+API_KEY       – LiteLLM proxy key (required)
+MODEL_NAME    – defaults to Qwen/Qwen2.5-72B-Instruct
 """
 
 from __future__ import annotations
@@ -36,16 +28,12 @@ from lexcrisis_env.models import Action
 from lexcrisis_env.tasks import SCRIPTED_BASELINES, TASK_ACTIONS, TASK_DEFINITIONS
 
 # ---------------------------------------------------------------------------
-# Configuration (read from environment – no hardcoded secrets)
+# Configuration – use EXACTLY the env vars the evaluator injects.
+# No defaults for API_BASE_URL or API_KEY; they MUST come from the evaluator.
 # ---------------------------------------------------------------------------
-API_BASE_URL: str = os.environ.get("API_BASE_URL", "https://router.huggingface.co/v1")
+API_BASE_URL: str = os.environ["API_BASE_URL"]
+API_KEY: str = os.environ["API_KEY"]
 MODEL_NAME: str = os.environ.get("MODEL_NAME", "Qwen/Qwen2.5-72B-Instruct")
-API_KEY: str = os.environ.get("HF_TOKEN") or os.environ.get("API_KEY", "")
-USE_LLM_BASELINE: bool = os.environ.get("USE_LLM_BASELINE", "0").lower() in {
-    "1",
-    "true",
-    "yes",
-}
 
 _SYSTEM_PROMPT = (
     "You are a legal operations AI agent solving tasks in the LexCrisis benchmark. "
@@ -91,14 +79,10 @@ def emit_end(success: bool, steps: int, rewards: List[float]) -> None:
 
 
 # ---------------------------------------------------------------------------
-# OpenAI client
+# OpenAI client – always built, always pointing at the evaluator proxy
 # ---------------------------------------------------------------------------
 
-def build_client() -> Optional[OpenAI]:
-    """Return an OpenAI client if credentials are available, else None."""
-    if not API_KEY:
-        return None
-    return OpenAI(base_url=API_BASE_URL, api_key=API_KEY)
+CLIENT: OpenAI = OpenAI(base_url=API_BASE_URL, api_key=API_KEY)
 
 
 # ---------------------------------------------------------------------------
@@ -133,7 +117,6 @@ def _parse_action_from_text(text: str, available_actions: List[str]) -> Optional
 
 
 def get_llm_action(
-    client: Optional[OpenAI],
     task_id: str,
     step_index: int,
     observation_dict: Dict[str, Any],
@@ -141,12 +124,10 @@ def get_llm_action(
 ) -> Dict[str, Any]:
     """Query the LLM for the next action.
 
-    If the LLM is unavailable or returns unparseable output, the scripted
-    fallback action is used to keep the episode on track.
+    ALWAYS makes an API call through the proxy.  If the LLM returns
+    unparseable output, the scripted fallback action is used to keep the
+    episode on track.
     """
-    if client is None or not USE_LLM_BASELINE:
-        return fallback_action
-
     available_actions: List[str] = observation_dict.get("available_actions", [])
 
     # Compose a compact prompt so the model can act without reading a wall of JSON
@@ -165,7 +146,7 @@ def get_llm_action(
     }
 
     try:
-        response = client.chat.completions.create(
+        response = CLIENT.chat.completions.create(
             model=MODEL_NAME,
             temperature=0,
             max_tokens=256,
@@ -182,11 +163,18 @@ def get_llm_action(
             ],
         )
         raw_text = response.choices[0].message.content or ""
+        sys.stderr.write(f"# LLM response (step {step_index}): {raw_text[:120]}...\n")
+        sys.stderr.flush()
         parsed = _parse_action_from_text(raw_text, available_actions)
         if parsed is not None:
             return parsed
-    except Exception:
-        pass  # Fall through to scripted baseline
+        # LLM returned something unparseable – use fallback but the API call was made
+        sys.stderr.write(f"# LLM output unparseable, using scripted fallback for step {step_index}\n")
+        sys.stderr.flush()
+    except Exception as exc:
+        # Log the error but DO NOT silently hide it
+        sys.stderr.write(f"# LLM API error at step {step_index}: {exc}\n")
+        sys.stderr.flush()
 
     return fallback_action
 
@@ -195,7 +183,7 @@ def get_llm_action(
 # Episode runner
 # ---------------------------------------------------------------------------
 
-def run_task(task_id: str, client: Optional[OpenAI]) -> Dict[str, Any]:
+def run_task(task_id: str) -> Dict[str, Any]:
     env = LexCrisisEnvironment()
     rewards: List[float] = []
     step_index = 0
@@ -212,7 +200,6 @@ def run_task(task_id: str, client: Optional[OpenAI]) -> Dict[str, Any]:
         for idx, raw_action in enumerate(scripted):
             step_index += 1
             agent_action = get_llm_action(
-                client,
                 task_id,
                 step_index,
                 obs_dict,
@@ -265,15 +252,13 @@ def run_task(task_id: str, client: Optional[OpenAI]) -> Dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 def main() -> None:
-    client = build_client()
+    sys.stderr.write(
+        f"# LLM mode active — model: {MODEL_NAME}, base: {API_BASE_URL}\n"
+        f"# API_KEY present: {bool(API_KEY)}\n"
+    )
+    sys.stderr.flush()
 
-    if USE_LLM_BASELINE and client is not None:
-        print(f"# LLM mode active — model: {MODEL_NAME}, base: {API_BASE_URL}")
-    else:
-        print("# Scripted mode — deterministic baseline (no API key / USE_LLM_BASELINE=0)")
-    sys.stdout.flush()
-
-    results = [run_task(task_id, client) for task_id in TASK_DEFINITIONS]
+    results = [run_task(task_id) for task_id in TASK_DEFINITIONS]
 
     output_dir = Path("outputs")
     output_dir.mkdir(exist_ok=True)

@@ -170,7 +170,7 @@ Environment variables:
 
 - `API_BASE_URL` default: `https://router.huggingface.co/v1`
 - `MODEL_NAME` default: `Qwen/Qwen2.5-72B-Instruct`
-- `HF_TOKEN` or `API_KEY`
+- `API_KEY` (required for LLM mode)
 
 Optional:
 
@@ -191,7 +191,7 @@ You do **not** need an API key for the default deterministic baseline.
 You only need a key if you enable optional LLM-assisted mode:
 
 ```bash
-export HF_TOKEN=your_token_here
+export API_KEY=your_token_here
 export USE_LLM_BASELINE=true
 python inference.py
 ```
@@ -199,7 +199,7 @@ python inference.py
 Windows PowerShell:
 
 ```powershell
-$env:HF_TOKEN="your_token_here"
+$env:API_KEY="your_token_here"
 $env:USE_LLM_BASELINE="true"
 python inference.py
 ```
