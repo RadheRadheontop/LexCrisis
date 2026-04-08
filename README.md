@@ -165,31 +165,27 @@ docker run -p 7860:7860 lexcrisis
 
 `inference.py` is the baseline agent runner. It executes all three tasks, queries the
 LLM via the provided proxy at every step, and emits structured logs in the required
-format.
+`[START]`/`[STEP]`/`[END]` format.
 
-**All LLM calls go through the evaluator-provided LiteLLM proxy.** The script reads
-`API_BASE_URL` and `API_KEY` from environment variables and will exit immediately if
-either is missing.
+**All LLM calls go through the evaluator-provided LiteLLM proxy.**
 
 Environment variables (injected by the evaluator):
 
-- `API_BASE_URL` – LiteLLM proxy base URL (**required**, no default)
-- `API_KEY` – LiteLLM proxy API key (**required**, no default)
+- `API_BASE_URL` – proxy base URL (default: `https://router.huggingface.co/v1`)
 - `MODEL_NAME` – model to request (default: `Qwen/Qwen2.5-72B-Instruct`)
+- `HF_TOKEN` – HuggingFace / proxy API key (**no default**, injected at runtime)
 
 Run:
 
 ```bash
-export API_BASE_URL=https://your-proxy-url/v1
-export API_KEY=your_key_here
+export HF_TOKEN=your_token_here
 python inference.py
 ```
 
 Windows PowerShell:
 
 ```powershell
-$env:API_BASE_URL="https://your-proxy-url/v1"
-$env:API_KEY="your_key_here"
+$env:HF_TOKEN="your_token_here"
 python inference.py
 ```
 

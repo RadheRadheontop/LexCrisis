@@ -25,29 +25,32 @@ def _clamp_score(raw: float) -> float:
 
 
 def _safe_divide(numerator: float, denominator: float) -> float:
-    return numerator / denominator if denominator else 0.0
+    raw = numerator / denominator if denominator else 0.0
+    return _clamp_score(raw)
 
 
 def _f1(predicted: Set[str], actual: Set[str]) -> float:
     if not predicted and not actual:
-        return 1.0
+        return _SCORE_CEIL
     if not predicted or not actual:
-        return 0.0
+        return _SCORE_FLOOR
     true_positive = len(predicted & actual)
-    precision = _safe_divide(true_positive, len(predicted))
-    recall = _safe_divide(true_positive, len(actual))
+    precision = true_positive / len(predicted) if len(predicted) else 0.0
+    recall = true_positive / len(actual) if len(actual) else 0.0
     if precision + recall == 0:
-        return 0.0
-    return (2 * precision * recall) / (precision + recall)
+        return _SCORE_FLOOR
+    raw = (2 * precision * recall) / (precision + recall)
+    return _clamp_score(raw)
 
 
 def _keyword_overlap(predicted: str, expected_keywords: Iterable[str]) -> float:
     keywords = {normalize(keyword) for keyword in expected_keywords if normalize(keyword)}
     if not keywords:
-        return 1.0
+        return _SCORE_CEIL
     text = normalize(predicted)
     matched = sum(1 for keyword in keywords if keyword in text)
-    return matched / len(keywords)
+    raw = matched / len(keywords)
+    return _clamp_score(raw)
 
 
 def grade_task_1(findings: Dict[str, Any], ground_truth: Dict[str, Any]) -> float:
@@ -86,7 +89,7 @@ def grade_task_1(findings: Dict[str, Any], ground_truth: Dict[str, Any]) -> floa
             correct_rules += 0.6
     rule_accuracy = _safe_divide(correct_rules, len(actual_rules))
 
-    score = (0.45 * pair_f1) + (0.35 * decision_accuracy) + (0.20 * min(rule_accuracy, 1.0))
+    score = (0.45 * pair_f1) + (0.35 * decision_accuracy) + (0.20 * min(rule_accuracy, _SCORE_CEIL))
     return _clamp_score(score)
 
 
@@ -208,7 +211,7 @@ def grade_task_3(findings: Dict[str, Any], ground_truth: Dict[str, Any]) -> floa
             discovery_response_score += 0.6
         if any(term in objections for term in ("privilege", "section 126", "section 129", "advocate")):
             discovery_response_score += 0.4
-    discovery_response_score = min(discovery_response_score, 1.0)
+    discovery_response_score = min(discovery_response_score, _SCORE_CEIL)
 
     expert_assessment = findings.get("expert_assessed", {})
     expert_score = 0.0
@@ -231,7 +234,7 @@ def grade_task_3(findings: Dict[str, Any], ground_truth: Dict[str, Any]) -> floa
             ordering_pairs += 1
             if action_order.index(left_event) < action_order.index(right_event):
                 correct_pairs += 1
-    ordering_score = _safe_divide(correct_pairs, ordering_pairs) if ordering_pairs else 0.0
+    ordering_score = _safe_divide(correct_pairs, ordering_pairs) if ordering_pairs else _SCORE_FLOOR
 
     score = (
         (0.30 * deadline_accuracy)

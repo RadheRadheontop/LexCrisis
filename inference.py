@@ -207,6 +207,16 @@ def emit_start(task_id: str) -> None:
     sys.stdout.flush()
 
 
+# Strict score bounds required by Phase-2 validation
+_EMIT_FLOOR = 0.001
+_EMIT_CEIL  = 0.999
+
+
+def _clamp_emit(value: float) -> float:
+    """Clamp any emitted score/reward to the open interval (0, 1)."""
+    return round(max(_EMIT_FLOOR, min(float(value), _EMIT_CEIL)), 4)
+
+
 def emit_step(
     step: int,
     action: Dict[str, Any],
@@ -214,17 +224,24 @@ def emit_step(
     done: bool,
     error: Optional[str],
 ) -> None:
+    # Clamp reward to (0, 1) open interval as required by the evaluator
+    safe_reward = _clamp_emit(reward)
     error_value = error if error is not None else "null"
     print(
-        f"[STEP] step={step} action={action_string(action)} reward={reward:.2f} "
+        f"[STEP] step={step} action={action_string(action)} reward={safe_reward:.4f} "
         f"done={str(done).lower()} error={error_value}"
     )
     sys.stdout.flush()
 
 
-def emit_end(success: bool, steps: int, rewards: List[float]) -> None:
-    rewards_text = ",".join(f"{r:.2f}" for r in rewards)
-    print(f"[END] success={str(success).lower()} steps={steps} rewards={rewards_text}")
+def emit_end(success: bool, steps: int, score: float, rewards: List[float]) -> None:
+    # Both the per-step rewards and the final task score must be strictly in (0, 1)
+    safe_score = _clamp_emit(score)
+    rewards_text = ",".join(f"{_clamp_emit(r):.4f}" for r in rewards)
+    print(
+        f"[END] success={str(success).lower()} steps={steps} "
+        f"score={safe_score:.4f} rewards={rewards_text}"
+    )
     sys.stdout.flush()
 
 
@@ -357,7 +374,8 @@ def run_task(task_id: str) -> Dict[str, Any]:
             except Exception as exc:
                 error_message = str(exc)
 
-            rewards.append(round(reward, 2))
+            # Clamp reward before storing so the list never holds 0.0 or 1.0
+            rewards.append(_clamp_emit(reward))
             emit_step(step_index, agent_action, reward, done, error_message)
 
             if error_message is not None:
@@ -370,20 +388,17 @@ def run_task(task_id: str) -> Dict[str, Any]:
             success = True
             final_score = env.last_score
     finally:
-        final_score = env.last_score
+        final_score = _clamp_emit(env.last_score)
         env.close()
-        emit_end(success, step_index, rewards)
-
-    # Phase-2 requirement: score must be strictly in (0, 1)
-    final_score = max(0.001, min(final_score, 0.999))
+        emit_end(success, step_index, final_score, rewards)
 
     return {
         "task_id": task_id,
         "task_name": TASK_DEFINITIONS[task_id].name,
-        "score": final_score,
+        "score": _clamp_emit(final_score),
         "steps": step_index,
         "success": success,
-        "rewards": rewards,
+        "rewards": [_clamp_emit(r) for r in rewards],
     }
 
 
